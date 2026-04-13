@@ -29,17 +29,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'description is required' }, { status: 400 });
   }
 
-  const systemPrompt = `You are a scheduling assistant for caregivers of children with special needs.
+  const systemPrompt = `You are a daily life scheduling assistant helping people build healthy routines.
 Given a plain-language description of an activity, suggest:
 - A short, clear activity name (3-5 words max)
-- A recommended duration in minutes (multiples of 5, between 5 and 120)
+- A recommended duration in minutes (multiples of 5, between 5 and 180)
 - Which tags from the provided library are relevant (return their exact labels)
+
+Focus on realistic daily life activities: morning routines, exercise, work, meals, family time, faith practices, household tasks, self-care, hobbies, and recreation.
 
 Respond ONLY with valid JSON in this shape:
 {
-  "name": "Morning Circle",
+  "name": "Morning Walk",
   "duration": 30,
-  "suggestedTags": ["Greeting", "Calendar time"]
+  "suggestedTags": ["Walk", "Fresh air", "Cardio"]
 }`;
 
   const userPrompt = `Activity description: "${description}"

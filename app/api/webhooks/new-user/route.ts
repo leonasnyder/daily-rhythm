@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Resend } from 'resend';
 import sql from '@/lib/db';
 import { TASK_LIBRARY_SEED } from '@/lib/task-library-seed';
+import { SEED_ACTIVITIES } from '@/lib/seed-activities';
 
 export const dynamic = 'force-dynamic';
 
 async function seedTaskLibrary(userId: string) {
-  // Only seed if user has no library yet
   const existing = await sql`
     SELECT id FROM task_library_categories WHERE user_id = ${userId} LIMIT 1
   `;
@@ -30,6 +30,35 @@ async function seedTaskLibrary(userId: string) {
   });
 }
 
+async function seedActivities(userId: string) {
+  const existing = await sql`
+    SELECT id FROM activities WHERE user_id = ${userId} LIMIT 1
+  `;
+  if ((existing as unknown[]).length > 0) return;
+
+  for (const act of SEED_ACTIVITIES) {
+    const [{ id: actId }] = await sql`
+      INSERT INTO activities (user_id, name, description, category, color, is_default)
+      VALUES (${userId}, ${act.name}, ${act.description}, ${act.category}, ${act.color}, ${act.is_default})
+      RETURNING id
+    ` as Array<{ id: number }>;
+
+    for (const sub of act.sub_activities) {
+      await sql`
+        INSERT INTO activity_sub_activities (activity_id, label)
+        VALUES (${actId}, ${sub})
+      `;
+    }
+
+    for (const d of act.defaults) {
+      await sql`
+        INSERT INTO activity_defaults (activity_id, default_time, default_duration)
+        VALUES (${actId}, ${d.time}, ${d.duration})
+      `;
+    }
+  }
+}
+
 export async function POST(req: NextRequest) {
   const resend = new Resend(process.env.RESEND_API_KEY);
   try {
@@ -39,22 +68,23 @@ export async function POST(req: NextRequest) {
     const userId = body?.record?.id ?? body?.id ?? null;
     const createdAt = body?.record?.created_at ?? new Date().toISOString();
 
-    // Seed task library for new user
     if (userId) {
       await seedTaskLibrary(userId);
+      await seedActivities(userId);
     }
 
-    await resend.emails.send({
-      from: 'Daily Rhythm <onboarding@resend.dev>',
-      to: process.env.NOTIFY_EMAIL!,
-      subject: 'New user signed up — Daily Rhythm',
-      html: `
-        <p>A new user has signed up for your Daily Rhythm app.</p>
-        <p><strong>Email:</strong> ${email}</p>
-        <p><strong>Signed up:</strong> ${new Date(createdAt).toLocaleString()}</p>
-        <p>You can view and manage users in your <a href="https://supabase.com/dashboard/project/wagrrwhpjpzkcvnopftw/auth/users">Supabase dashboard</a>.</p>
-      `,
-    });
+    if (process.env.NOTIFY_EMAIL && process.env.RESEND_API_KEY) {
+      await resend.emails.send({
+        from: 'Daily Rhythm <onboarding@resend.dev>',
+        to: process.env.NOTIFY_EMAIL,
+        subject: 'New user signed up — Daily Rhythm',
+        html: `
+          <p>A new user has signed up for Daily Rhythm.</p>
+          <p><strong>Email:</strong> ${email}</p>
+          <p><strong>Signed up:</strong> ${new Date(createdAt).toLocaleString()}</p>
+        `,
+      });
+    }
 
     return NextResponse.json({ success: true });
   } catch (e) {

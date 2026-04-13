@@ -330,6 +330,25 @@ export default function SettingsPage() {
           </div>
 
           <Button
+            id="settings-seed-activities"
+            variant="outline"
+            className="w-full justify-start"
+            onClick={async () => {
+              try {
+                const res = await fetch('/api/activities/seed');
+                const data = await res.json();
+                if (data.success) toast.success(`${data.count} starter activities added to your library!`);
+                else if (data.message) toast.success('Starter activities already set up');
+                else toast.error('Seeding failed');
+              } catch {
+                toast.error('Seeding failed');
+              }
+            }}
+          >
+            <BookOpen className="h-4 w-4 mr-2" /> Load Starter Activities
+          </Button>
+
+          <Button
             id="settings-seed-library"
             variant="outline"
             className="w-full justify-start"
@@ -337,7 +356,7 @@ export default function SettingsPage() {
               try {
                 const res = await fetch('/api/task-library/seed');
                 const data = await res.json();
-                if (data.success) toast.success('Task library seeded with 12 categories!');
+                if (data.success) toast.success('Task library seeded with all categories!');
                 else if (data.message) toast.success('Task library already set up');
                 else toast.error('Seeding failed');
               } catch {
@@ -345,7 +364,7 @@ export default function SettingsPage() {
               }
             }}
           >
-            <BookOpen className="h-4 w-4 mr-2" /> Set up Task Library (Program)
+            <BookOpen className="h-4 w-4 mr-2" /> Load Task Library
           </Button>
 
           <Button
