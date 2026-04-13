@@ -38,8 +38,8 @@ export default function SignupPage() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
         <div className="bg-white rounded-2xl shadow-sm border p-10 w-full max-w-sm text-center">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="w-16 h-16 bg-teal-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="h-8 w-8 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
@@ -49,7 +49,7 @@ export default function SignupPage() {
           </p>
           <a
             href="/login"
-            className="inline-block mt-6 text-sm text-red-600 hover:text-red-700 font-semibold"
+            className="inline-block mt-6 text-sm text-teal-600 hover:text-teal-700 font-semibold"
           >
             Back to sign in
           </a>
@@ -61,17 +61,20 @@ export default function SignupPage() {
   return (
     <div className="min-h-screen flex flex-col lg:flex-row">
       {/* Brand panel */}
-      <div className="lg:w-1/2 bg-red-600 flex flex-col items-center justify-center p-10 text-white min-h-[220px] lg:min-h-screen">
+      <div
+        className="lg:w-1/2 flex flex-col items-center justify-center p-10 text-white min-h-[220px] lg:min-h-screen"
+        style={{ background: 'linear-gradient(135deg, #0f2a3f 0%, #0f4c5c 100%)' }}
+      >
         <div className="max-w-sm text-center lg:text-left">
           <img
-            src="/logo.png"
+            src="/logo.svg"
             alt="Daily Rhythm"
             className="h-20 w-auto object-contain mx-auto lg:mx-0 mb-6 drop-shadow-lg"
             onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
           />
           <h1 className="text-3xl font-bold tracking-tight mb-3">Daily Rhythm</h1>
-          <p className="text-red-100 text-base leading-relaxed">
-            Daily activity scheduling and behavioral data tracking — built for care providers and their teams.
+          <p className="text-teal-200 text-base leading-relaxed">
+            Live each day with intention — schedule your routines, track your habits, and stay on top of everything that matters.
           </p>
         </div>
       </div>
@@ -81,7 +84,7 @@ export default function SignupPage() {
         <div className="w-full max-w-sm">
           <div className="mb-8">
             <h2 className="text-2xl font-bold text-gray-900">Create your account</h2>
-            <p className="text-gray-500 text-sm mt-1">Get started with Daily Rhythm</p>
+            <p className="text-gray-500 text-sm mt-1">Get started with Daily Rhythm — it&apos;s free</p>
           </div>
 
           <form onSubmit={handleSignup} className="space-y-5">
@@ -96,7 +99,7 @@ export default function SignupPage() {
                 required
                 autoComplete="email"
                 placeholder="you@example.com"
-                className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-shadow placeholder-gray-400"
+                className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-shadow placeholder-gray-400"
               />
             </div>
             <div>
@@ -111,7 +114,7 @@ export default function SignupPage() {
                 minLength={6}
                 autoComplete="new-password"
                 placeholder="••••••••"
-                className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-shadow placeholder-gray-400"
+                className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-shadow placeholder-gray-400"
               />
               <p className="text-xs text-gray-400 mt-1.5">Minimum 6 characters</p>
             </div>
@@ -125,7 +128,8 @@ export default function SignupPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-red-600 hover:bg-red-700 active:bg-red-800 text-white rounded-lg px-4 py-3 text-sm font-semibold transition-colors disabled:opacity-50 shadow-sm"
+              className="w-full text-white rounded-lg px-4 py-3 text-sm font-semibold transition-colors disabled:opacity-50 shadow-sm"
+              style={{ background: 'linear-gradient(135deg, #0f4c5c, #1a6b5a)' }}
             >
               {loading ? 'Creating account…' : 'Create account'}
             </button>
@@ -133,7 +137,7 @@ export default function SignupPage() {
 
           <p className="text-sm text-gray-500 mt-6 text-center">
             Already have an account?{' '}
-            <a href="/login" className="text-red-600 hover:text-red-700 font-semibold">
+            <a href="/login" className="text-teal-600 hover:text-teal-700 font-semibold">
               Sign in
             </a>
           </p>

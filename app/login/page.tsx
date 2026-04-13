@@ -28,17 +28,20 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex flex-col lg:flex-row">
       {/* Brand panel */}
-      <div className="lg:w-1/2 bg-red-600 flex flex-col items-center justify-center p-10 text-white min-h-[220px] lg:min-h-screen">
+      <div
+        className="lg:w-1/2 flex flex-col items-center justify-center p-10 text-white min-h-[220px] lg:min-h-screen"
+        style={{ background: 'linear-gradient(135deg, #0f2a3f 0%, #0f4c5c 100%)' }}
+      >
         <div className="max-w-sm text-center lg:text-left">
           <img
-            src="/logo.png"
+            src="/logo.svg"
             alt="Daily Rhythm"
             className="h-20 w-auto object-contain mx-auto lg:mx-0 mb-6 drop-shadow-lg"
             onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
           />
           <h1 className="text-3xl font-bold tracking-tight mb-3">Daily Rhythm</h1>
-          <p className="text-red-100 text-base leading-relaxed">
-            Daily activity scheduling and behavioral data tracking — built for care providers and their teams.
+          <p className="text-teal-200 text-base leading-relaxed">
+            Live each day with intention — schedule your routines, track your habits, and stay on top of everything that matters.
           </p>
         </div>
       </div>
@@ -63,13 +66,13 @@ export default function LoginPage() {
                 required
                 autoComplete="email"
                 placeholder="you@example.com"
-                className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-shadow placeholder-gray-400"
+                className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-shadow placeholder-gray-400"
               />
             </div>
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-sm font-semibold text-gray-700">Password</label>
-                <a href="/forgot-password" className="text-xs text-red-600 hover:text-red-700 font-medium">
+                <a href="/forgot-password" className="text-xs text-teal-600 hover:text-teal-700 font-medium">
                   Forgot password?
                 </a>
               </div>
@@ -80,7 +83,7 @@ export default function LoginPage() {
                 required
                 autoComplete="current-password"
                 placeholder="••••••••"
-                className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-shadow placeholder-gray-400"
+                className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-shadow placeholder-gray-400"
               />
             </div>
 
@@ -93,7 +96,8 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-red-600 hover:bg-red-700 active:bg-red-800 text-white rounded-lg px-4 py-3 text-sm font-semibold transition-colors disabled:opacity-50 shadow-sm"
+              className="w-full text-white rounded-lg px-4 py-3 text-sm font-semibold transition-colors disabled:opacity-50 shadow-sm"
+              style={{ background: 'linear-gradient(135deg, #0f4c5c, #1a6b5a)' }}
             >
               {loading ? 'Signing in…' : 'Sign in'}
             </button>
@@ -101,7 +105,7 @@ export default function LoginPage() {
 
           <p className="text-sm text-gray-500 mt-6 text-center">
             Don&apos;t have an account?{' '}
-            <a href="/signup" className="text-red-600 hover:text-red-700 font-semibold">
+            <a href="/signup" className="text-teal-600 hover:text-teal-700 font-semibold">
               Create one
             </a>
           </p>
