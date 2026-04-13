@@ -37,8 +37,8 @@ export default function TaskLibraryManager({ open, onClose }: TaskLibraryManager
       const data = await fetch('/api/task-library').then(r => r.json());
       if (Array.isArray(data)) {
         setCategories(data);
-        // Auto-expand all on first load
-        setExpanded(new Set(data.map((c: LibraryCategory) => c.id)));
+        // Start with all categories collapsed
+        setExpanded(new Set());
       }
     } catch { toast.error('Failed to load library'); }
     finally { setLoading(false); }
