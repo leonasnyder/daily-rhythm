@@ -34,7 +34,7 @@ export default function ResetPasswordPage() {
       <div className="bg-white rounded-xl shadow-sm border p-8 w-full max-w-sm">
         <div className="flex items-center gap-3 mb-6">
           <img
-            src="/logo.png"
+            src="/logo.svg"
             alt="Daily Rhythm"
             className="h-10 w-auto object-contain"
             onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
