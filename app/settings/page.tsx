@@ -151,7 +151,7 @@ export default function SettingsPage() {
 
       {/* Notifications */}
       <Card id="settings-notifications">
-        <CardHeader><CardTitle className="flex items-center gap-2"><Bell className="h-5 w-5 text-red-600" /> Notifications</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-2"><Bell className="h-5 w-5 text-teal-600" /> Notifications</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
@@ -277,7 +277,7 @@ export default function SettingsPage() {
 
       {/* Theme */}
       <Card id="settings-theme">
-        <CardHeader><CardTitle className="flex items-center gap-2"><Sun className="h-5 w-5 text-red-600" /> Appearance</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-2"><Sun className="h-5 w-5 text-teal-600" /> Appearance</CardTitle></CardHeader>
         <CardContent>
           <div id="settings-theme-toggle" className="flex rounded-lg border overflow-hidden w-fit">
             {[
@@ -291,7 +291,7 @@ export default function SettingsPage() {
                 onClick={() => { setTheme(value); saveSetting('theme', value); }}
                 className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium min-h-[44px] transition-colors ${
                   theme === value
-                    ? 'bg-red-600 text-white'
+                    ? 'bg-teal-600 text-white'
                     : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50'
                 }`}
               >
@@ -304,7 +304,7 @@ export default function SettingsPage() {
 
       {/* Data Management */}
       <Card id="settings-data">
-        <CardHeader><CardTitle className="flex items-center gap-2"><Download className="h-5 w-5 text-red-600" /> Data Management</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-2"><Download className="h-5 w-5 text-teal-600" /> Data Management</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           <Button id="settings-export" variant="outline" className="w-full justify-start" onClick={exportData}>
             <Download className="h-4 w-4 mr-2" /> Export all data as JSON
@@ -387,6 +387,25 @@ export default function SettingsPage() {
           </Button>
 
           <Button
+            id="settings-seed-baby"
+            variant="outline"
+            className="w-full justify-start"
+            onClick={async () => {
+              try {
+                const res = await fetch('/api/task-library/seed-baby');
+                const data = await res.json();
+                if (data.success) toast.success(`Baby & toddler library added (${data.categories} categories)!`);
+                else if (data.message) toast.success('Baby & toddler library already added');
+                else toast.error('Seeding failed');
+              } catch {
+                toast.error('Seeding failed');
+              }
+            }}
+          >
+            <BookOpen className="h-4 w-4 mr-2" /> Add Baby & Toddler Library
+          </Button>
+
+          <Button
             id="settings-manage-library"
             variant="outline"
             className="w-full justify-start"
@@ -408,7 +427,7 @@ export default function SettingsPage() {
 
       {/* Automatic Backups */}
       <Card id="settings-backups">
-        <CardHeader><CardTitle className="flex items-center gap-2"><DatabaseBackup className="h-5 w-5 text-red-600" /> Automatic Backups</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-2"><DatabaseBackup className="h-5 w-5 text-teal-600" /> Automatic Backups</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           <p className="text-xs text-gray-500">A full backup is saved automatically every night at midnight. The last 14 days are kept.</p>
           <Button
@@ -467,8 +486,8 @@ export default function SettingsPage() {
         <CardHeader><CardTitle className="flex items-center gap-2"><Info className="h-5 w-5 text-gray-400" /> About</CardTitle></CardHeader>
         <CardContent className="text-sm text-gray-500 space-y-1">
           <p><strong>Daily Rhythm</strong> v1.0.0</p>
-          <p>Daily activity scheduler and habit and life tracker for care providers.</p>
-          <p className="text-xs">Built for Daily Rhythm · Runs fully offline</p>
+          <p>Daily activity scheduler and habit tracker for a life lived with intention.</p>
+          <p className="text-xs">Built for Daily Rhythm · Works on any device</p>
         </CardContent>
       </Card>
 
