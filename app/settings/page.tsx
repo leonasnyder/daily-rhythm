@@ -349,6 +349,25 @@ export default function SettingsPage() {
           </Button>
 
           <Button
+            id="settings-seed-habits"
+            variant="outline"
+            className="w-full justify-start"
+            onClick={async () => {
+              try {
+                const res = await fetch('/api/habits/seed');
+                const data = await res.json();
+                if (data.success) toast.success(`${data.count} starter habits added to your tracker!`);
+                else if (data.message) toast.success('Starter habits already set up');
+                else toast.error('Seeding failed');
+              } catch {
+                toast.error('Seeding failed');
+              }
+            }}
+          >
+            <BookOpen className="h-4 w-4 mr-2" /> Load Starter Habits
+          </Button>
+
+          <Button
             id="settings-seed-library"
             variant="outline"
             className="w-full justify-start"
