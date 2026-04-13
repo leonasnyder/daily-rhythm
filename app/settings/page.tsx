@@ -425,6 +425,25 @@ export default function SettingsPage() {
           </Button>
 
           <Button
+            id="settings-seed-moving"
+            variant="outline"
+            className="w-full justify-start"
+            onClick={async () => {
+              try {
+                const res = await fetch('/api/task-library/seed-moving');
+                const data = await res.json();
+                if (data.success) toast.success(`Moving checklist added (${data.categories} timelines)!`);
+                else if (data.message) toast.success('Moving checklist already added');
+                else toast.error('Seeding failed');
+              } catch {
+                toast.error('Seeding failed');
+              }
+            }}
+          >
+            <BookOpen className="h-4 w-4 mr-2" /> Add Moving Checklist
+          </Button>
+
+          <Button
             id="settings-manage-library"
             variant="outline"
             className="w-full justify-start"
