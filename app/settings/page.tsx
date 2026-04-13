@@ -1,8 +1,9 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { useTheme } from 'next-themes';
-import { Sun, Moon, Monitor, Bell, Download, Upload, Trash2, Info, BookOpen, DatabaseBackup, Settings2 } from 'lucide-react';
+import { Sparkles, Sun, Moon, Monitor, Bell, Download, Upload, Trash2, Info, BookOpen, DatabaseBackup, Settings2 } from 'lucide-react';
 import TaskLibraryManager from '@/components/settings/TaskLibraryManager';
+import AiTaskLibraryGenerator from '@/components/settings/AiTaskLibraryGenerator';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -40,6 +41,7 @@ export default function SettingsPage() {
   const [backups, setBackups] = useState<{ id: number; label: string; created_at: string }[]>([]);
   const [backupRunning, setBackupRunning] = useState(false);
   const [libraryManagerOpen, setLibraryManagerOpen] = useState(false);
+  const [aiGeneratorOpen, setAiGeneratorOpen] = useState(false);
 
   useEffect(() => {
     fetch('/api/settings').then(r => r.json()).then(setSettings).catch(() => {});
@@ -330,6 +332,15 @@ export default function SettingsPage() {
           </div>
 
           <Button
+            id="settings-ai-generate"
+            className="w-full justify-start text-white"
+            style={{ background: 'linear-gradient(135deg, #0f4c5c, #d97706)' }}
+            onClick={() => setAiGeneratorOpen(true)}
+          >
+            <Sparkles className="h-4 w-4 mr-2" /> Generate a Task List with AI
+          </Button>
+
+          <Button
             id="settings-seed-activities"
             variant="outline"
             className="w-full justify-start"
@@ -549,6 +560,7 @@ export default function SettingsPage() {
       </Card>
 
       <TaskLibraryManager open={libraryManagerOpen} onClose={() => setLibraryManagerOpen(false)} />
+      <AiTaskLibraryGenerator open={aiGeneratorOpen} onClose={() => setAiGeneratorOpen(false)} />
     </div>
   );
 }
