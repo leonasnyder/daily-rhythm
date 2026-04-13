@@ -28,11 +28,11 @@ export default function TopNav() {
   if (pathname === '/') return null;
 
   return (
-    <header id="top-nav" className="sticky top-0 z-50 bg-black shadow-md">
+    <header id="top-nav" className="sticky top-0 z-50 shadow-md" style={{ background: 'linear-gradient(135deg, #0f2a3f 0%, #0f4c5c 100%)' }}>
       <div className="flex items-center justify-between px-4 h-16 max-w-7xl mx-auto">
         <div id="top-nav-brand" className="flex items-center gap-3">
           <img
-            src="/logo.png"
+            src="/logo.svg"
             alt="Daily Rhythm"
             className="h-10 w-auto object-contain"
             onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
@@ -54,8 +54,8 @@ export default function TopNav() {
               className={cn(
                 'px-4 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px] flex items-center',
                 pathname.startsWith(href)
-                  ? 'bg-red-600 text-white'
-                  : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                  ? 'bg-amber-500 text-white'
+                  : 'text-teal-200 hover:bg-teal-800 hover:text-white'
               )}
             >
               {label}
@@ -65,7 +65,7 @@ export default function TopNav() {
 
         <div className="flex items-center gap-2">
           {email && (
-            <span className="text-xs text-gray-400 hidden sm:block truncate max-w-[160px]">
+            <span className="text-xs text-teal-300 hidden sm:block truncate max-w-[160px]">
               {email}
             </span>
           )}
@@ -75,8 +75,8 @@ export default function TopNav() {
             className={cn(
               'p-2 rounded-lg transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center',
               pathname === '/settings'
-                ? 'bg-red-600 text-white'
-                : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                ? 'bg-amber-500 text-white'
+                : 'text-teal-200 hover:bg-teal-800 hover:text-white'
             )}
             aria-label="Settings"
           >
@@ -84,7 +84,7 @@ export default function TopNav() {
           </Link>
           <button
             onClick={handleLogout}
-            className="p-2 rounded-lg transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-400 hover:bg-gray-800 hover:text-white"
+            className="p-2 rounded-lg transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center text-teal-200 hover:bg-teal-800 hover:text-white"
             aria-label="Sign out"
           >
             <LogOut className="h-5 w-5" />
