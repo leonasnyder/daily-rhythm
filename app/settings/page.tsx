@@ -425,6 +425,25 @@ export default function SettingsPage() {
           </Button>
 
           <Button
+            id="settings-seed-cbu-nursing"
+            variant="outline"
+            className="w-full justify-start"
+            onClick={async () => {
+              try {
+                const res = await fetch('/api/task-library/seed-cbu-nursing');
+                const data = await res.json();
+                if (data.success) toast.success(`CBU Nursing checklist added (${data.categories} categories)!`);
+                else if (data.message) toast.success('CBU Nursing checklist already added');
+                else toast.error('Seeding failed');
+              } catch {
+                toast.error('Seeding failed');
+              }
+            }}
+          >
+            <BookOpen className="h-4 w-4 mr-2" /> Add CBU Nursing Plan (4, 4.5 & 5 Year)
+          </Button>
+
+          <Button
             id="settings-seed-moving"
             variant="outline"
             className="w-full justify-start"
