@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google';
 import './globals.css';
 import { ThemeProvider } from 'next-themes';
 import TopNav from '@/components/layout/TopNav';
+import BottomNav from '@/components/layout/BottomNav';
 import { Toaster } from 'sonner';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
@@ -32,9 +33,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <div id="app-root" className="flex flex-col min-h-screen">
             <TopNav />
-            <main id="app-main" className="flex-1 overflow-auto">
+            <main id="app-main" className="flex-1 overflow-auto pb-16 md:pb-0">
               {children}
             </main>
+            <BottomNav />
           </div>
           <Toaster richColors position="top-right" />
         </ThemeProvider>

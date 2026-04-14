@@ -42,11 +42,13 @@ export default function TopNav() {
           </span>
         </div>
 
-        <nav id="top-nav-tabs" className="flex gap-1">
+        {/* Desktop tabs — hidden on mobile (bottom nav handles mobile) */}
+        <nav id="top-nav-tabs" className="hidden md:flex gap-1">
           {[
-            { href: '/scheduler', label: 'Scheduler' },
-            { href: '/tracker', label: 'Habit Tracker' },
-            { href: '/tasks', label: 'Reminders' },
+            { href: '/scheduler', label: 'Schedule' },
+            { href: '/tracker',   label: 'Habits'   },
+            { href: '/journal',   label: 'Journal'  },
+            { href: '/tasks',     label: 'Reminders'},
           ].map(({ href, label }) => (
             <Link
               key={href}
