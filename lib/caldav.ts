@@ -55,7 +55,13 @@ function xmlBlock(xml: string, localName: string): string | null {
 }
 
 function xmlAllBlocks(xml: string, localName: string): string[] {
-  const re = new RegExp(`<[^>]*:?${localName}[^>]*>([\\s\\S]*?)<\\/?[^>]*:?${localName}\\s*>`, 'gi');
+  // Match opening tag (with optional namespace prefix and attributes)
+  // and its corresponding closing tag, capturing content between them.
+  // Uses a non-greedy match so nested same-name tags aren't swallowed.
+  const re = new RegExp(
+    `<(?:[a-zA-Z0-9_-]+:)?${localName}(?:\\s[^>]*)?>([\\s\\S]*?)</(?:[a-zA-Z0-9_-]+:)?${localName}\\s*>`,
+    'gi'
+  );
   const results: string[] = [];
   let m: RegExpExecArray | null;
   while ((m = re.exec(xml)) !== null) results.push(m[1]);
@@ -375,7 +381,20 @@ export async function fetchEventsForDate(
     events.push(...parsed);
   }
 
-  return events;
+  // iCloud sometimes returns recurring event masters with the original DTSTART
+  // (not the expanded occurrence date). Filter client-side to only keep events
+  // that genuinely fall on the requested date.
+  const compact = date.replace(/-/g, ''); // "20260414"
+  return events.filter(ev => {
+    const startCompact = ev.dtstart.slice(0, 8); // first 8 chars = YYYYMMDD
+    const endCompact   = ev.dtend.slice(0, 8);
+    if (ev.isAllDay) {
+      // All-day / multi-day: date must fall within [start, end)
+      return startCompact <= compact && compact < endCompact;
+    }
+    // Timed event: must start on this date
+    return startCompact === compact;
+  });
 }
 
 // ---------------------------------------------------------------------------
