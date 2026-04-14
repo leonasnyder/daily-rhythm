@@ -353,7 +353,9 @@ export async function fetchEventsForDate(
 <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
   <D:prop>
     <D:getetag/>
-    <C:calendar-data/>
+    <C:calendar-data>
+      <C:expand start="${start}" end="${end}"/>
+    </C:calendar-data>
   </D:prop>
   <C:filter>
     <C:comp-filter name="VCALENDAR">
