@@ -445,8 +445,28 @@ export async function fetchEventsForDate(
     }
 
     if ((ev as { isRecurring?: boolean }).isRecurring) {
-      // Recurring master: server confirmed an occurrence today.
-      // Substitute today's date into dtstart/dtend, keeping the original time portion.
+      // Distinguish two cases:
+      //   A) Master event: original DTSTART is from a past series (weeks/months ago).
+      //      The server confirmed today has an occurrence → substitute today's date.
+      //   B) Adjacent-day event pulled in by the extended UTC window
+      //      (e.g. Monday 7 PM Pacific = 2 AM Tuesday UTC, returned when querying Tuesday).
+      //      startCompact = yesterday → this is NOT today's event → skip it.
+      const sy = parseInt(startCompact.slice(0, 4), 10);
+      const sm = parseInt(startCompact.slice(4, 6), 10) - 1;
+      const sd = parseInt(startCompact.slice(6, 8), 10);
+      const ty = parseInt(compact.slice(0, 4), 10);
+      const tm = parseInt(compact.slice(4, 6), 10) - 1;
+      const td = parseInt(compact.slice(6, 8), 10);
+      const diffDays = Math.round(
+        (Date.UTC(ty, tm, td) - Date.UTC(sy, sm, sd)) / 86_400_000
+      );
+
+      if (diffDays <= 0) {
+        // Yesterday or earlier — not today's occurrence, skip
+        continue;
+      }
+
+      // diffDays > 0: master event from the past, substitute today's date
       const timePart = ev.dtstart.slice(8); // e.g. "T190000" or "T190000Z"
       const endTimePart = ev.dtend.slice(8);
       result.push({
