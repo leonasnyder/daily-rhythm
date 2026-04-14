@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { CalendarCheck, Check, ChevronDown, ChevronUp } from 'lucide-react';
+import { CalendarCheck, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
 import { formatTime } from '@/lib/utils';
 
 interface CalEvent {
@@ -14,19 +14,41 @@ interface CalEvent {
 
 export default function CalDAVPanel({ date }: { date: string }) {
   const [events, setEvents] = useState<CalEvent[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(true);
 
   useEffect(() => {
     setEvents([]);
+    setError(null);
     let cancelled = false;
     fetch(`/api/caldav/sync?date=${date}`)
-      .then(r => (r.ok ? r.json() : []))
-      .then(data => {
-        if (!cancelled) setEvents(Array.isArray(data) ? data : []);
+      .then(async r => {
+        const data = await r.json();
+        if (!r.ok) throw new Error(data?.error ?? `Sync failed (${r.status})`);
+        return data;
       })
-      .catch(() => {});
+      .then(data => {
+        if (cancelled) return;
+        if (Array.isArray(data)) setEvents(data);
+      })
+      .catch(e => {
+        if (!cancelled) setError((e as Error).message);
+      });
     return () => { cancelled = true; };
   }, [date]);
+
+  if (error) {
+    return (
+      <div className="mb-4 rounded-lg border border-red-200 dark:border-red-800 overflow-hidden">
+        <div className="flex items-center gap-2 px-3 py-2 bg-red-50 dark:bg-red-900/20">
+          <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
+          <span className="text-sm text-red-700 dark:text-red-300">
+            Apple Calendar sync failed: {error}
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   if (events.length === 0) return null;
 
