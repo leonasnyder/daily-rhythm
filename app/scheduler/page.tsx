@@ -6,6 +6,7 @@ import CalendarWidget from '@/components/shared/CalendarWidget';
 import DayView from '@/components/scheduler/DayView';
 import WeekView from '@/components/scheduler/WeekView';
 import ActivityManager from '@/components/scheduler/ActivityManager';
+import TimerWidget from '@/components/scheduler/TimerWidget';
 import { Button } from '@/components/ui/button';
 import { CalendarDays, Calendar, Settings2, RefreshCw } from 'lucide-react';
 import { useActivityReminders } from '@/lib/hooks/useActivityReminders';
@@ -67,6 +68,7 @@ export default function SchedulerPage() {
             <Settings2 className="h-4 w-4 mr-2" />
             Manage Activities
           </Button>
+          <TimerWidget />
         </div>
 
         {/* Main Content */}
