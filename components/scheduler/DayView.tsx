@@ -5,7 +5,7 @@ import {
   useSensor, useSensors, closestCenter, useDroppable,
 } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { Plus, Printer, Loader2, RefreshCw, AlertTriangle, Undo2, Lock, Pencil, Trash2, Check } from 'lucide-react';
+import { Plus, Printer, Loader2, RefreshCw, AlertTriangle, Undo2, Lock, Pencil, Trash2, Check, Bell } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 import { useReactToPrint } from 'react-to-print';
@@ -21,6 +21,15 @@ import { ExportDayDocButton } from '@/components/shared/ExportButtons';
 import {
   Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
+
+interface DueTask {
+  id: number;
+  title: string;
+  is_completed: number;
+  due_date: string;
+  due_time: string | null;
+  parent_id: number | null;
+}
 
 interface ScheduleEntry {
   id: number;
@@ -79,6 +88,7 @@ let _settingsCache: { start: string; end: string } | null = null;
 
 export default function DayView({ date, refreshKey, onReset }: DayViewProps) {
   const [entries, setEntries] = useState<ScheduleEntry[]>([]);
+  const [dueTasks, setDueTasks] = useState<DueTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [scheduleStart, setScheduleStart] = useState('07:00');
   const [scheduleEnd, setScheduleEnd] = useState('22:00');
@@ -106,9 +116,18 @@ export default function DayView({ date, refreshKey, onReset }: DayViewProps) {
   const fetchEntries = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/schedule?date=${date}`);
-      const data = await res.json();
-      setEntries(Array.isArray(data) ? data : []);
+      const [schedRes, tasksRes] = await Promise.all([
+        fetch(`/api/schedule?date=${date}`),
+        fetch('/api/tasks'),
+      ]);
+      const schedData = await schedRes.json();
+      const tasksData = await tasksRes.json();
+      setEntries(Array.isArray(schedData) ? schedData : []);
+      if (Array.isArray(tasksData)) {
+        setDueTasks(
+          tasksData.filter((t: DueTask) => t.due_date === date && !t.parent_id)
+        );
+      }
     } catch {
       toast.error('Failed to load schedule');
     } finally {
@@ -383,7 +402,8 @@ export default function DayView({ date, refreshKey, onReset }: DayViewProps) {
   // Build timeline segments: one per activity (spanning its slots) or one per empty slot
   type Segment =
     | { type: 'empty'; slotIdx: number }
-    | { type: 'activity'; slotIdx: number; spanSlots: number; entry: ScheduleEntry };
+    | { type: 'activity'; slotIdx: number; spanSlots: number; entry: ScheduleEntry }
+    | { type: 'reminder'; slotIdx: number; task: DueTask };
 
   const entryByStartSlot = new Map<number, ScheduleEntry>();
   const hiddenEntries: ScheduleEntry[] = [];
@@ -397,11 +417,37 @@ export default function DayView({ date, refreshKey, onReset }: DayViewProps) {
     }
   }
 
+  // Map due tasks to their slot index (tasks with a due_time land at that time; no time → day start)
+  const remindersBySlot = new Map<number, DueTask[]>();
+  const allDayReminders: DueTask[] = [];
+  for (const task of dueTasks) {
+    if (task.due_time) {
+      const taskMin = timeToMinutes(task.due_time);
+      const slotIdx = Math.round((taskMin - DAY_START_MIN) / SLOT_INTERVAL_MIN);
+      if (slotIdx >= 0 && slotIdx < TOTAL_SLOTS) {
+        const existing = remindersBySlot.get(slotIdx) ?? [];
+        existing.push(task);
+        remindersBySlot.set(slotIdx, existing);
+      } else {
+        allDayReminders.push(task);
+      }
+    } else {
+      allDayReminders.push(task);
+    }
+  }
+
   // Detect entries hidden by overlap (covered by a preceding activity's duration)
   const segments: Segment[] = [];
   const coveredSlots = new Set<number>();
   let si = 0;
   while (si < TOTAL_SLOTS) {
+    // Insert any reminders at this slot BEFORE the activity/empty slot
+    const slotReminders = remindersBySlot.get(si);
+    if (slotReminders) {
+      for (const task of slotReminders) {
+        segments.push({ type: 'reminder', slotIdx: si, task });
+      }
+    }
     const entry = entryByStartSlot.get(si);
     if (entry) {
       const spanSlots = Math.max(1, Math.round(entry.duration_minutes / SLOT_INTERVAL_MIN));
@@ -469,6 +515,44 @@ export default function DayView({ date, refreshKey, onReset }: DayViewProps) {
           >
             <Pencil className="h-3.5 w-3.5 mr-1" /> Edit This Day
           </Button>
+        </div>
+      )}
+
+      {/* All-day reminders (due date set, no specific time) */}
+      {allDayReminders.length > 0 && (
+        <div className="mb-3 rounded-lg border border-teal-200 dark:border-teal-700 overflow-hidden">
+          <div className="flex items-center gap-2 px-3 py-2 bg-teal-50 dark:bg-teal-900/20">
+            <Bell className="h-4 w-4 text-teal-600 flex-shrink-0" />
+            <span className="text-sm font-medium text-teal-800 dark:text-teal-300">
+              Reminders due today
+            </span>
+          </div>
+          <div className="divide-y divide-teal-100 dark:divide-teal-800">
+            {allDayReminders.map(task => (
+              <div key={task.id} className="flex items-center gap-3 px-3 py-2 bg-white dark:bg-gray-800">
+                <button
+                  onClick={async () => {
+                    const next = task.is_completed ? 0 : 1;
+                    setDueTasks(prev => prev.map(t => t.id === task.id ? { ...t, is_completed: next } : t));
+                    await fetch(`/api/tasks/${task.id}`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ is_completed: next }),
+                    });
+                  }}
+                  className={cn(
+                    'w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors',
+                    task.is_completed ? 'bg-teal-500 border-teal-500 text-white' : 'border-teal-400 hover:border-teal-600'
+                  )}
+                >
+                  {task.is_completed ? <Check className="h-3 w-3" /> : null}
+                </button>
+                <span className={cn('text-sm flex-1', task.is_completed && 'line-through text-gray-400')}>
+                  {task.title}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -575,6 +659,48 @@ export default function DayView({ date, refreshKey, onReset }: DayViewProps) {
                         onToggleSubActivity={handleToggleSubActivity}
                         onResizeStart={isLocked ? undefined : handleResizeStart}
                       />
+                    </div>
+                  </div>
+                );
+              }
+
+              // Reminder row (task with due_time on this date)
+              if (seg.type === 'reminder') {
+                const slotMin = DAY_START_MIN + seg.slotIdx * SLOT_INTERVAL_MIN;
+                const h = Math.floor(slotMin / 60);
+                const m = slotMin % 60;
+                const timeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+                return (
+                  <div key={`reminder-${seg.task.id}`} className="flex items-center" style={{ minHeight: `${SLOT_HEIGHT_PX}px` }}>
+                    <div className="w-16 flex-shrink-0 text-right pr-2 select-none">
+                      <span className="text-xs font-mono font-bold text-teal-600 dark:text-teal-400">
+                        {formatTime(timeStr)}
+                      </span>
+                    </div>
+                    <div className="flex-1 border-l border-teal-200 dark:border-teal-700 pl-1 pb-0.5">
+                      <div className="flex items-center gap-2 px-2 py-1 rounded-md bg-teal-50 dark:bg-teal-900/30 border border-teal-200 dark:border-teal-700">
+                        <button
+                          onClick={async () => {
+                            const next = seg.task.is_completed ? 0 : 1;
+                            setDueTasks(prev => prev.map(t => t.id === seg.task.id ? { ...t, is_completed: next } : t));
+                            await fetch(`/api/tasks/${seg.task.id}`, {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ is_completed: next }),
+                            });
+                          }}
+                          className={cn(
+                            'w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors',
+                            seg.task.is_completed ? 'bg-teal-500 border-teal-500 text-white' : 'border-teal-400 hover:border-teal-600'
+                          )}
+                        >
+                          {seg.task.is_completed ? <Check className="h-2.5 w-2.5" /> : null}
+                        </button>
+                        <Bell className="h-3 w-3 text-teal-500 flex-shrink-0" />
+                        <span className={cn('text-xs font-medium text-teal-800 dark:text-teal-300 flex-1', seg.task.is_completed && 'line-through opacity-50')}>
+                          {seg.task.title}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 );

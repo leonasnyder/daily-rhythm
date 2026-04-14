@@ -6,7 +6,6 @@ import CalendarWidget from '@/components/shared/CalendarWidget';
 import DayView from '@/components/scheduler/DayView';
 import WeekView from '@/components/scheduler/WeekView';
 import ActivityManager from '@/components/scheduler/ActivityManager';
-import DueRemindersBar from '@/components/scheduler/DueRemindersBar';
 import { Button } from '@/components/ui/button';
 import { CalendarDays, Calendar, Settings2, RefreshCw } from 'lucide-react';
 import { useActivityReminders } from '@/lib/hooks/useActivityReminders';
@@ -102,10 +101,7 @@ export default function SchedulerPage() {
           </div>
 
           {viewMode === 'day' ? (
-            <>
-              <DueRemindersBar date={selectedDate} />
-              <DayView date={selectedDate} refreshKey={dayRefreshKey} onReset={handleDayReset} />
-            </>
+            <DayView date={selectedDate} refreshKey={dayRefreshKey} onReset={handleDayReset} />
           ) : (
             <WeekView
               selectedDate={selectedDate}
