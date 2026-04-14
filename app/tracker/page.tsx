@@ -1,10 +1,10 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { format } from 'date-fns';
 import DatePicker from '@/components/shared/DatePicker';
 import HabitManager from '@/components/tracker/HabitManager';
 import { Button } from '@/components/ui/button';
-import { Settings2, Loader2, CheckCircle2, Circle, ChevronDown, ChevronRight, Plus, Flame } from 'lucide-react';
+import { Settings2, Loader2, CheckCircle2, Circle, ChevronDown, ChevronRight, Plus, Flame, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -65,6 +65,10 @@ export default function HabitTrackerPage() {
   const [toggling, setToggling] = useState<Set<number>>(new Set());
   const [managerOpen, setManagerOpen] = useState(false);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+  // Inline add state
+  const [addingToCategory, setAddingToCategory] = useState<string | null>(null);
+  const [newHabitName, setNewHabitName] = useState('');
+  const addInputRef = useRef<HTMLInputElement>(null);
 
   const fetchHabits = useCallback(async () => {
     try {
@@ -127,6 +131,40 @@ export default function HabitTrackerPage() {
       else s.add(category);
       return s;
     });
+  };
+
+  const startAddingToCategory = (category: string) => {
+    setAddingToCategory(category);
+    setNewHabitName('');
+    // Expand the category if collapsed
+    setCollapsedCategories(prev => { const s = new Set(prev); s.delete(category); return s; });
+    setTimeout(() => addInputRef.current?.focus(), 80);
+  };
+
+  const handleAddHabit = async (category: string) => {
+    if (!newHabitName.trim()) { setAddingToCategory(null); return; }
+    try {
+      const res = await fetch('/api/habits', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newHabitName.trim(), category, color: '#6B7280', frequency: 'daily' }),
+      });
+      const habit = await res.json();
+      setHabits(prev => [...prev, habit]);
+      setNewHabitName('');
+      addInputRef.current?.focus(); // stay open to add more
+    } catch { toast.error('Failed to add habit'); }
+  };
+
+  const handleDeleteHabit = async (id: number) => {
+    setHabits(prev => prev.filter(h => h.id !== id));
+    setCompletions(prev => prev.filter(c => c.habit_id !== id));
+    try {
+      await fetch(`/api/habits/${id}`, { method: 'DELETE' });
+    } catch {
+      toast.error('Failed to delete habit');
+      fetchHabits();
+    }
   };
 
   // Group habits by category
@@ -197,11 +235,12 @@ export default function HabitTrackerPage() {
         <div className="text-center py-16 text-gray-400">
           <CheckCircle2 className="h-12 w-12 mx-auto mb-3 opacity-30" />
           <p className="text-lg font-medium">No habits yet</p>
-          <p className="text-sm mt-1">Click &quot;Manage Habits&quot; to add your first habit</p>
+          <p className="text-sm mt-1">Tap below to add your first habit</p>
           <Button
             variant="default"
             size="sm"
             className="mt-4"
+            style={{ background: 'linear-gradient(135deg, #0f4c5c, #0f766e)' }}
             onClick={() => setManagerOpen(true)}
           >
             <Plus className="h-4 w-4 mr-1" /> Add Your First Habit
@@ -252,17 +291,16 @@ export default function HabitTrackerPage() {
                       const done = isCompleted(habit.id);
                       const isToggling = toggling.has(habit.id);
                       return (
-                        <li key={habit.id}>
+                        <li key={habit.id} className="flex items-center group">
                           <button
                             onClick={() => toggleHabit(habit.id)}
                             disabled={isToggling}
                             className={cn(
-                              'w-full flex items-center gap-3 px-4 py-3.5 text-left transition-colors min-h-[52px]',
+                              'flex-1 flex items-center gap-3 px-4 py-3.5 text-left transition-colors min-h-[52px]',
                               'hover:bg-gray-50 dark:hover:bg-gray-700/50 active:bg-gray-100 dark:active:bg-gray-700',
                               done && 'opacity-60'
                             )}
                           >
-                            {/* Circle / check icon */}
                             <div className="flex-shrink-0">
                               {done
                                 ? <CheckCircle2 className="h-6 w-6 text-green-500" />
@@ -281,9 +319,52 @@ export default function HabitTrackerPage() {
                               <Loader2 className="h-4 w-4 animate-spin text-gray-300 flex-shrink-0" />
                             )}
                           </button>
+                          {/* Delete button */}
+                          <button
+                            onClick={() => handleDeleteHabit(habit.id)}
+                            className="px-3 py-3.5 text-gray-200 hover:text-red-500 dark:text-gray-700 dark:hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                            aria-label={`Delete ${habit.name}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
                         </li>
                       );
                     })}
+
+                    {/* Inline add row */}
+                    {addingToCategory === category ? (
+                      <li className="flex items-center gap-3 px-4 py-2.5 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+                        <Circle className="h-5 w-5 text-gray-200 shrink-0" />
+                        <input
+                          ref={addInputRef}
+                          value={newHabitName}
+                          onChange={e => setNewHabitName(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') handleAddHabit(category);
+                            if (e.key === 'Escape') { setAddingToCategory(null); setNewHabitName(''); }
+                          }}
+                          placeholder="New habit name…"
+                          className="flex-1 text-sm bg-transparent focus:outline-none placeholder:text-gray-400"
+                        />
+                        <button
+                          onClick={() => handleAddHabit(category)}
+                          className="text-xs text-teal-600 font-semibold px-2"
+                        >Add</button>
+                        <button
+                          onClick={() => { setAddingToCategory(null); setNewHabitName(''); }}
+                          className="text-gray-400 hover:text-gray-600"
+                        ><X className="h-4 w-4" /></button>
+                      </li>
+                    ) : (
+                      <li>
+                        <button
+                          onClick={() => startAddingToCategory(category)}
+                          className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-gray-400 hover:text-teal-600 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors border-t border-gray-100 dark:border-gray-700"
+                        >
+                          <Plus className="h-3.5 w-3.5" /> Add habit
+                        </button>
+                      </li>
+                    )}
                   </ul>
                 )}
               </div>
