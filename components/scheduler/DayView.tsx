@@ -398,10 +398,12 @@ export default function DayView({ date, refreshKey, onReset }: DayViewProps) {
     documentTitle: `Schedule-${date}`,
   });
 
-  // Compute time range from user settings
-  const DAY_START_MIN = parseHour(scheduleStart, 7) * 60;
-  const DAY_END_MIN = parseHour(scheduleEnd, 22) * 60;
-  const TOTAL_SLOTS = Math.max(1, (DAY_END_MIN - DAY_START_MIN) / SLOT_INTERVAL_MIN);
+  // Compute time range from user settings — use full HH:MM precision, not just hours
+  const DAY_START_MIN = timeToMinutes(scheduleStart) || 7 * 60;
+  const _rawEndMin = timeToMinutes(scheduleEnd) || 22 * 60;
+  // Guard: ensure at least 1 hour of range so a misconfigured end time doesn't collapse the schedule
+  const DAY_END_MIN = _rawEndMin > DAY_START_MIN + 60 ? _rawEndMin : DAY_START_MIN + (15 * 60); // fallback: 15-hour day
+  const TOTAL_SLOTS = Math.max(4, (DAY_END_MIN - DAY_START_MIN) / SLOT_INTERVAL_MIN);
 
   // Build timeline segments: one per activity (spanning its slots) or one per empty slot
   type Segment =
