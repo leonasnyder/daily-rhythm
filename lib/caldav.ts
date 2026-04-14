@@ -63,8 +63,10 @@ function xmlAllBlocks(xml: string, localName: string): string[] {
 }
 
 /**
- * Perform a WebDAV/CalDAV request, following 301/302/307/308 redirects
- * while preserving the method and Authorization header (browsers don't always).
+ * Perform a WebDAV/CalDAV request.
+ * Uses redirect:'follow' so Node.js handles redirects automatically.
+ * For PROPFIND/REPORT, iCloud typically responds without needing method-preserving
+ * redirects when hitting the correct URL directly.
  */
 async function davRequest(
   url: string,
@@ -72,36 +74,39 @@ async function davRequest(
   auth: string,
   body?: string,
   extraHeaders?: Record<string, string>,
-  maxRedirects = 5
 ): Promise<{ status: number; headers: Headers; text: string; finalUrl: string }> {
-  let currentUrl = url;
+  const res = await fetch(url, {
+    method,
+    headers: {
+      Authorization: auth,
+      'Content-Type': 'application/xml; charset=utf-8',
+      Depth: '0',
+      ...extraHeaders,
+    },
+    body,
+    redirect: 'follow',
+  });
 
-  for (let i = 0; i < maxRedirects; i++) {
-    const res = await fetch(currentUrl, {
-      method,
-      headers: {
-        Authorization: auth,
-        'Content-Type': 'application/xml; charset=utf-8',
-        Depth: '0',
-        ...extraHeaders,
-      },
-      body,
-      redirect: 'manual', // handle redirects ourselves
-    });
+  const text = await res.text();
+  // res.url is the final URL after redirects (if any)
+  return { status: res.status, headers: res.headers, text, finalUrl: res.url || url };
+}
 
-    if (res.status >= 300 && res.status < 400) {
-      const loc = res.headers.get('location');
-      if (!loc) break;
-      // Resolve relative redirects
-      currentUrl = loc.startsWith('http') ? loc : new URL(loc, currentUrl).toString();
-      continue;
-    }
-
-    const text = await res.text();
-    return { status: res.status, headers: res.headers, text, finalUrl: currentUrl };
-  }
-
-  throw new Error(`Too many redirects for ${url}`);
+/**
+ * Extract an href that is nested inside a parent tag.
+ * e.g. <D:current-user-principal><D:href>/path/</D:href></D:current-user-principal>
+ */
+function xmlNestedHref(xml: string, parentLocalName: string): string | null {
+  // Find the parent block
+  const blockRe = new RegExp(
+    `<[^>]*:?${parentLocalName}[^>]*/?>([\\s\\S]*?)</?[^>]*:?${parentLocalName}\\s*>`,
+    'i'
+  );
+  const blockMatch = xml.match(blockRe);
+  if (!blockMatch) return null;
+  const block = blockMatch[1];
+  // Find href inside it
+  return xmlFirst(block, 'href');
 }
 
 // ---------------------------------------------------------------------------
@@ -114,31 +119,43 @@ export async function discoverPrincipalUrl(
   password: string
 ): Promise<string> {
   const auth = basicAuth(username, password);
+  const base = serverUrl.replace(/\/$/, '');
 
-  // Try well-known first
-  const wellKnown = serverUrl.replace(/\/$/, '') + '/.well-known/caldav';
-  const body = `<?xml version="1.0" encoding="UTF-8"?>
+  const propfindBody = `<?xml version="1.0" encoding="UTF-8"?>
 <D:propfind xmlns:D="DAV:">
   <D:prop>
     <D:current-user-principal/>
   </D:prop>
 </D:propfind>`;
 
-  const res = await davRequest(wellKnown, 'PROPFIND', auth, body, { Depth: '0' });
+  // iCloud: try the root URL first (avoids redirect complexity), then well-known
+  const urlsToTry = [
+    base + '/',
+    base + '/.well-known/caldav',
+  ];
 
-  if (res.status < 200 || res.status >= 300) {
-    throw new Error(`CalDAV discovery failed (${res.status}): check credentials`);
+  for (const url of urlsToTry) {
+    try {
+      const res = await davRequest(url, 'PROPFIND', auth, propfindBody, { Depth: '0' });
+
+      if (res.status === 401) throw new Error('Invalid credentials — check your Apple ID and App-Specific Password');
+      if (res.status < 200 || res.status >= 300) continue;
+
+      // iCloud returns: <current-user-principal><href>/DSID/principal/</href></current-user-principal>
+      const href = xmlNestedHref(res.text, 'current-user-principal');
+      if (!href) continue;
+
+      if (href.startsWith('http')) return href;
+      const resBase = new URL(res.finalUrl);
+      return `${resBase.protocol}//${resBase.host}${href}`;
+    } catch (e) {
+      const msg = (e as Error).message;
+      if (msg.includes('Invalid credentials')) throw e;
+      // network error — try next URL
+    }
   }
 
-  const href = xmlFirst(res.text, 'current-user-principal')?.replace(/<[^>]+>/g, '').trim()
-    ?? xmlFirst(res.text, 'href');
-
-  if (!href) throw new Error('Could not find principal URL in CalDAV response');
-
-  // Build absolute URL
-  if (href.startsWith('http')) return href;
-  const base = new URL(res.finalUrl);
-  return `${base.protocol}//${base.host}${href}`;
+  throw new Error('Could not discover CalDAV principal — check server URL and credentials');
 }
 
 // ---------------------------------------------------------------------------
@@ -163,9 +180,8 @@ export async function getCalendarHome(
     throw new Error(`Failed to get calendar home (${res.status})`);
   }
 
-  // calendar-home-set contains an href
-  const block = xmlBlock(res.text, 'calendar-home-set');
-  const href = block ? xmlFirst(block, 'href') : null;
+  // calendar-home-set contains a nested href
+  const href = xmlNestedHref(res.text, 'calendar-home-set');
   if (!href) throw new Error('Could not find calendar-home-set in response');
 
   if (href.startsWith('http')) return href;
