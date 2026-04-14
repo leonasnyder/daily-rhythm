@@ -17,6 +17,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   if (typeof body.title === 'string') updates.title = body.title.trim();
   if (typeof body.notes === 'string' || body.notes === null) updates.notes = body.notes;
+  if (typeof body.due_date === 'string' || body.due_date === null) updates.due_date = body.due_date;
+  if (typeof body.due_time === 'string' || body.due_time === null) updates.due_time = body.due_time;
   if (typeof body.is_completed === 'number') {
     updates.is_completed = body.is_completed;
     updates.completed_at = body.is_completed ? new Date().toISOString() : null;
@@ -26,15 +28,15 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
   }
 
-  const [task] = await sql`
+  const rows = await sql`
     UPDATE pa_tasks
     SET ${sql(updates)}
     WHERE id = ${id} AND user_id = ${userId}
-    RETURNING id, title, notes, is_completed, completed_at, created_at
-  `;
+    RETURNING id, title, notes, is_completed, completed_at, due_date, due_time, parent_id, sort_order, created_at
+  ` as unknown as Array<Record<string, unknown>>;
 
-  if (!task) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  return NextResponse.json(task);
+  if (!rows.length) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  return NextResponse.json(rows[0]);
 }
 
 // DELETE /api/tasks/[id]
