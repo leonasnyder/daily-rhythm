@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import { Timer, Play, Square, RotateCcw } from 'lucide-react';
+import { Clock, Play, Square, RotateCcw } from 'lucide-react';
 
 function formatElapsed(secs: number): string {
   const h = Math.floor(secs / 3600);
@@ -69,7 +69,7 @@ export default function TimerWidget() {
     <div className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
       {/* Header */}
       <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-        <Timer className="h-4 w-4 text-teal-600" />
+        <Clock className="h-4 w-4 text-teal-600" />
         <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Stopwatch</span>
       </div>
 

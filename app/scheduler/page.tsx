@@ -59,6 +59,7 @@ export default function SchedulerPage() {
               setViewMode('day');
             }}
           />
+          <TimerWidget />
           <Button
             id="scheduler-manage-activities"
             variant="outline"
@@ -68,7 +69,6 @@ export default function SchedulerPage() {
             <Settings2 className="h-4 w-4 mr-2" />
             Manage Activities
           </Button>
-          <TimerWidget />
         </div>
 
         {/* Main Content */}
