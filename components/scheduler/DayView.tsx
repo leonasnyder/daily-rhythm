@@ -116,18 +116,9 @@ export default function DayView({ date, refreshKey, onReset }: DayViewProps) {
   const fetchEntries = useCallback(async () => {
     setLoading(true);
     try {
-      const [schedRes, tasksRes] = await Promise.all([
-        fetch(`/api/schedule?date=${date}`),
-        fetch('/api/tasks'),
-      ]);
-      const schedData = await schedRes.json();
-      const tasksData = await tasksRes.json();
-      setEntries(Array.isArray(schedData) ? schedData : []);
-      if (Array.isArray(tasksData)) {
-        setDueTasks(
-          tasksData.filter((t: DueTask) => t.due_date === date && !t.parent_id)
-        );
-      }
+      const res = await fetch(`/api/schedule?date=${date}`);
+      const data = await res.json();
+      setEntries(Array.isArray(data) ? data : []);
     } catch {
       toast.error('Failed to load schedule');
     } finally {
@@ -136,6 +127,19 @@ export default function DayView({ date, refreshKey, onReset }: DayViewProps) {
   }, [date]);
 
   useEffect(() => { fetchEntries(); }, [fetchEntries, refreshKey]);
+
+  // Due-date reminders — completely independent, never affects schedule loading
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/tasks')
+      .then(r => r.json())
+      .then(data => {
+        if (cancelled || !Array.isArray(data)) return;
+        setDueTasks(data.filter((t: DueTask) => t.due_date === date && !t.parent_id));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [date, refreshKey]);
 
   useEffect(() => {
     if (_settingsCache) {
