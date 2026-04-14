@@ -13,6 +13,7 @@ export interface CalDAVEvent {
   isAllDay: boolean;
   startTime: string | null; // "HH:MM" local or null for all-day
   endTime: string | null;
+  isRecurring?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -286,7 +287,7 @@ function icalToTime(value: string): { isAllDay: boolean; time: string | null; is
   return { isAllDay: true, time: null, iso: clean };
 }
 
-function parseVEvents(icalData: string): { uid: string; summary: string; dtstart: string; dtend: string; description?: string; location?: string; isAllDay: boolean; startTime: string | null; endTime: string | null }[] {
+function parseVEvents(icalData: string): { uid: string; summary: string; dtstart: string; dtend: string; description?: string; location?: string; isAllDay: boolean; startTime: string | null; endTime: string | null; isRecurring: boolean }[] {
   const unfolded = padIcalValue(icalData);
   const events: ReturnType<typeof parseVEvents> = [];
 
@@ -301,6 +302,9 @@ function parseVEvents(icalData: string): { uid: string; summary: string; dtstart
     const summary = parseIcalProp(lines, 'SUMMARY') ?? '(No title)';
     const description = parseIcalProp(lines, 'DESCRIPTION') ?? undefined;
     const location = parseIcalProp(lines, 'LOCATION') ?? undefined;
+
+    // Detect recurring events — they have RRULE or RECURRENCE-ID
+    const isRecurring = lines.some(l => l.toUpperCase().startsWith('RRULE'));
 
     // DTSTART may have params: DTSTART;TZID=America/Los_Angeles:20250415T090000
     // For recurring events iCloud may return a RECURRENCE-ID with the actual occurrence date
@@ -326,6 +330,7 @@ function parseVEvents(icalData: string): { uid: string; summary: string; dtstart
       isAllDay: start.isAllDay,
       startTime: start.time,
       endTime: end.time,
+      isRecurring,
     });
   }
 
@@ -383,20 +388,45 @@ export async function fetchEventsForDate(
     events.push(...parsed);
   }
 
-  // iCloud sometimes returns recurring event masters with the original DTSTART
-  // (not the expanded occurrence date). Filter client-side to only keep events
-  // that genuinely fall on the requested date.
+  // iCloud returns recurring event masters with the original series DTSTART,
+  // not the occurrence date. The server's time-range filter already confirmed
+  // these events occur on the requested date, so we trust that and fix up the
+  // display date for recurring timed events.
   const compact = date.replace(/-/g, ''); // "20260414"
-  return events.filter(ev => {
-    const startCompact = ev.dtstart.slice(0, 8); // first 8 chars = YYYYMMDD
+
+  const result: CalDAVEvent[] = [];
+  for (const ev of events) {
+    const startCompact = ev.dtstart.slice(0, 8);
     const endCompact   = ev.dtend.slice(0, 8);
+
     if (ev.isAllDay) {
       // All-day / multi-day: date must fall within [start, end)
-      return startCompact <= compact && compact < endCompact;
+      if (startCompact <= compact && compact < endCompact) result.push(ev);
+      continue;
     }
-    // Timed event: must start on this date
-    return startCompact === compact;
-  });
+
+    if (startCompact === compact) {
+      // Timed event already has the correct date
+      result.push(ev);
+      continue;
+    }
+
+    if ((ev as { isRecurring?: boolean }).isRecurring) {
+      // Recurring master: server confirmed an occurrence today.
+      // Substitute today's date into dtstart/dtend, keeping the original time portion.
+      const timePart = ev.dtstart.slice(8); // e.g. "T190000" or "T190000Z"
+      const endTimePart = ev.dtend.slice(8);
+      result.push({
+        ...ev,
+        dtstart: compact + timePart,
+        dtend:   compact + endTimePart,
+      });
+      continue;
+    }
+
+    // Non-recurring event on a different date — skip (server glitch / edge case)
+  }
+  return result;
 }
 
 // ---------------------------------------------------------------------------
