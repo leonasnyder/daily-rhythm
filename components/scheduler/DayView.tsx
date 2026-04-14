@@ -127,21 +127,31 @@ export default function DayView({ date, refreshKey, onReset }: DayViewProps) {
   const fetchEntries = useCallback(async () => {
     setLoading(true);
     try {
-      const [schedRes, tasksRes, calRes] = await Promise.all([
+      // Schedule and tasks are critical — fail loudly if they break.
+      // CalDAV is optional — silently swallow any errors so it never
+      // prevents the schedule from loading.
+      const [schedRes, tasksRes] = await Promise.all([
         fetch(`/api/schedule?date=${date}`),
         fetch('/api/tasks'),
-        fetch(`/api/caldav/sync?date=${date}`),
       ]);
       const schedData = await schedRes.json();
       const tasksData = await tasksRes.json();
-      const calData = calRes.ok ? await calRes.json() : [];
       setEntries(Array.isArray(schedData) ? schedData : []);
       if (Array.isArray(tasksData)) {
         setDueTasks(
           tasksData.filter((t: DueTask) => t.due_date === date && !t.parent_id)
         );
       }
-      setCalEvents(Array.isArray(calData) ? calData : []);
+
+      // CalDAV sync — non-blocking, never crashes the schedule
+      try {
+        const calRes = await fetch(`/api/caldav/sync?date=${date}`);
+        const calData = calRes.ok ? await calRes.json() : [];
+        setCalEvents(Array.isArray(calData) ? calData : []);
+      } catch {
+        // CalDAV unavailable — schedule still works fine
+        setCalEvents([]);
+      }
     } catch {
       toast.error('Failed to load schedule');
     } finally {
