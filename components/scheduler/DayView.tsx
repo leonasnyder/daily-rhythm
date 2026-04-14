@@ -5,7 +5,7 @@ import {
   useSensor, useSensors, closestCenter, useDroppable,
 } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { Plus, Printer, Loader2, RefreshCw, AlertTriangle, Undo2, Lock, Pencil, Trash2, Check, Bell, Apple } from 'lucide-react';
+import { Plus, Printer, Loader2, RefreshCw, AlertTriangle, Undo2, Lock, Pencil, Trash2, Check, Bell, CalendarCheck } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 import { useReactToPrint } from 'react-to-print';
@@ -577,7 +577,7 @@ export default function DayView({ date, refreshKey, onReset }: DayViewProps) {
       {allDayCalEvents.length > 0 && (
         <div className="mb-3 rounded-lg border border-blue-200 dark:border-blue-700 overflow-hidden">
           <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20">
-            <Apple className="h-4 w-4 text-blue-600 flex-shrink-0" />
+            <CalendarCheck className="h-4 w-4 text-blue-600 flex-shrink-0" />
             <span className="text-sm font-medium text-blue-800 dark:text-blue-300">
               All-day events
             </span>
@@ -799,7 +799,7 @@ export default function DayView({ date, refreshKey, onReset }: DayViewProps) {
                     </div>
                     <div className="flex-1 border-l border-blue-200 dark:border-blue-700 pl-1 pb-0.5">
                       <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700">
-                        <Apple className="h-3 w-3 text-blue-500 flex-shrink-0" />
+                        <CalendarCheck className="h-3 w-3 text-blue-500 flex-shrink-0" />
                         <span className="text-xs font-medium text-blue-800 dark:text-blue-300 flex-1 truncate">
                           {ev.summary}
                         </span>

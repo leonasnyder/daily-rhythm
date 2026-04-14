@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { Apple, Check, Loader2, Trash2, RefreshCw, ExternalLink, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { CalendarCheck, Check, Loader2, Trash2, RefreshCw, ExternalLink, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
@@ -108,7 +108,7 @@ export default function CalDAVSettings() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Apple className="h-5 w-5 text-gray-700 dark:text-gray-300" />
+          <CalendarCheck className="h-5 w-5 text-gray-700 dark:text-gray-300" />
           <span className="font-medium text-gray-900 dark:text-white">Apple Calendar</span>
           {creds.connected && (
             <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
@@ -153,7 +153,7 @@ export default function CalDAVSettings() {
             Requires an App-Specific Password from Apple.
           </p>
           <Button variant="outline" size="sm" onClick={() => { setShowForm(true); setShowInstructions(true); }}>
-            <Apple className="h-4 w-4 mr-1.5" />
+            <CalendarCheck className="h-4 w-4 mr-1.5" />
             Connect Apple Calendar
           </Button>
         </div>
