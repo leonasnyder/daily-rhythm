@@ -500,7 +500,13 @@ export async function fetchAllEventsForDate(
     calendars.map(cal => fetchEventsForDate(cal.url, username, password, date).catch(() => []))
   );
 
-  return allEvents.flat();
+  // Deduplicate by UID — iCloud can return the same event from multiple calendars
+  const seen = new Set<string>();
+  return allEvents.flat().filter(ev => {
+    if (seen.has(ev.uid)) return false;
+    seen.add(ev.uid);
+    return true;
+  });
 }
 
 // ---------------------------------------------------------------------------

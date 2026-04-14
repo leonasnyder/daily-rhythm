@@ -5,7 +5,7 @@ import {
   useSensor, useSensors, closestCenter, useDroppable,
 } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { Plus, Printer, Loader2, RefreshCw, AlertTriangle, Undo2, Lock, Pencil, Trash2, Check, Bell } from 'lucide-react';
+import { Plus, Printer, Loader2, RefreshCw, AlertTriangle, Undo2, Lock, Pencil, Trash2, Check, Bell, CalendarCheck } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 import { useReactToPrint } from 'react-to-print';
@@ -29,6 +29,15 @@ interface DueTask {
   due_date: string;
   due_time: string | null;
   parent_id: number | null;
+}
+
+interface CalEvent {
+  uid: string;
+  summary: string;
+  isAllDay: boolean;
+  startTime: string | null;
+  endTime: string | null;
+  location?: string;
 }
 
 interface ScheduleEntry {
@@ -89,6 +98,7 @@ let _settingsCache: { start: string; end: string } | null = null;
 export default function DayView({ date, refreshKey, onReset }: DayViewProps) {
   const [entries, setEntries] = useState<ScheduleEntry[]>([]);
   const [dueTasks, setDueTasks] = useState<DueTask[]>([]);
+  const [calEvents, setCalEvents] = useState<CalEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [scheduleStart, setScheduleStart] = useState('07:00');
   const [scheduleEnd, setScheduleEnd] = useState('22:00');
@@ -137,6 +147,17 @@ export default function DayView({ date, refreshKey, onReset }: DayViewProps) {
         if (cancelled || !Array.isArray(data)) return;
         setDueTasks(data.filter((t: DueTask) => t.due_date === date && !t.parent_id));
       })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [date, refreshKey]);
+
+  // Apple Calendar events — independent fetch, never affects schedule loading
+  useEffect(() => {
+    let cancelled = false;
+    setCalEvents([]);
+    fetch(`/api/caldav/sync?date=${date}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(data => { if (!cancelled && Array.isArray(data)) setCalEvents(data); })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [date, refreshKey]);
@@ -412,7 +433,8 @@ export default function DayView({ date, refreshKey, onReset }: DayViewProps) {
   type Segment =
     | { type: 'empty'; slotIdx: number }
     | { type: 'activity'; slotIdx: number; spanSlots: number; entry: ScheduleEntry }
-    | { type: 'reminder'; slotIdx: number; task: DueTask };
+    | { type: 'reminder'; slotIdx: number; task: DueTask }
+    | { type: 'caldav'; slotIdx: number; event: CalEvent };
 
   const entryByStartSlot = new Map<number, ScheduleEntry>();
   const hiddenEntries: ScheduleEntry[] = [];
@@ -445,6 +467,21 @@ export default function DayView({ date, refreshKey, onReset }: DayViewProps) {
     }
   }
 
+  // Map timed CalDAV events to their slot index
+  const calEventsBySlot = new Map<number, CalEvent[]>();
+  const allDayCalEvents = calEvents.filter(e => e.isAllDay);
+  for (const ev of calEvents) {
+    if (!ev.isAllDay && ev.startTime) {
+      const evMin = timeToMinutes(ev.startTime);
+      const slotIdx = Math.round((evMin - DAY_START_MIN) / SLOT_INTERVAL_MIN);
+      if (slotIdx >= 0 && slotIdx < TOTAL_SLOTS) {
+        const existing = calEventsBySlot.get(slotIdx) ?? [];
+        existing.push(ev);
+        calEventsBySlot.set(slotIdx, existing);
+      }
+    }
+  }
+
   // Detect entries hidden by overlap (covered by a preceding activity's duration)
   const segments: Segment[] = [];
   const coveredSlots = new Set<number>();
@@ -455,6 +492,13 @@ export default function DayView({ date, refreshKey, onReset }: DayViewProps) {
     if (slotReminders) {
       for (const task of slotReminders) {
         segments.push({ type: 'reminder', slotIdx: si, task });
+      }
+    }
+    // Insert Apple Calendar events at this slot
+    const slotCalEvents = calEventsBySlot.get(si);
+    if (slotCalEvents) {
+      for (const event of slotCalEvents) {
+        segments.push({ type: 'caldav', slotIdx: si, event });
       }
     }
     const entry = entryByStartSlot.get(si);
@@ -524,6 +568,18 @@ export default function DayView({ date, refreshKey, onReset }: DayViewProps) {
           >
             <Pencil className="h-3.5 w-3.5 mr-1" /> Edit This Day
           </Button>
+        </div>
+      )}
+
+      {/* All-day Apple Calendar events */}
+      {allDayCalEvents.length > 0 && (
+        <div className="mb-3 rounded-lg border border-blue-200 dark:border-blue-700 overflow-hidden">
+          <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20">
+            <CalendarCheck className="h-4 w-4 text-blue-500 flex-shrink-0" />
+            <span className="text-sm font-medium text-blue-800 dark:text-blue-300">
+              All day — {allDayCalEvents.map(e => e.summary).join(', ')}
+            </span>
+          </div>
         </div>
       )}
 
@@ -709,6 +765,37 @@ export default function DayView({ date, refreshKey, onReset }: DayViewProps) {
                         <span className={cn('text-xs font-medium text-teal-800 dark:text-teal-300 flex-1', seg.task.is_completed && 'line-through opacity-50')}>
                           {seg.task.title}
                         </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              // Apple Calendar event row
+              if (seg.type === 'caldav') {
+                const slotMin = DAY_START_MIN + seg.slotIdx * SLOT_INTERVAL_MIN;
+                const h = Math.floor(slotMin / 60);
+                const m = slotMin % 60;
+                const timeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+                return (
+                  <div key={`caldav-${seg.event.uid}`} className="flex items-center" style={{ minHeight: `${SLOT_HEIGHT_PX}px` }}>
+                    <div className="w-16 flex-shrink-0 text-right pr-2 select-none">
+                      <span className="text-xs font-mono font-bold text-blue-600 dark:text-blue-400">
+                        {formatTime(timeStr)}
+                      </span>
+                    </div>
+                    <div className="flex-1 border-l border-blue-200 dark:border-blue-700 pl-1 pb-0.5">
+                      <div className="flex items-center gap-2 px-2 py-1 rounded-md bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700">
+                        <CalendarCheck className="h-3 w-3 text-blue-500 flex-shrink-0" />
+                        <span className="text-xs font-medium text-blue-800 dark:text-blue-300 flex-1 truncate">
+                          {seg.event.summary}
+                          {seg.event.endTime ? ` – ${formatTime(seg.event.endTime)}` : ''}
+                        </span>
+                        {seg.event.location && (
+                          <span className="text-xs text-gray-400 truncate max-w-[80px]" title={seg.event.location}>
+                            📍 {seg.event.location}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
