@@ -127,31 +127,9 @@ export default function DayView({ date, refreshKey, onReset }: DayViewProps) {
   const fetchEntries = useCallback(async () => {
     setLoading(true);
     try {
-      // Schedule and tasks are critical — fail loudly if they break.
-      // CalDAV is optional — silently swallow any errors so it never
-      // prevents the schedule from loading.
-      const [schedRes, tasksRes] = await Promise.all([
-        fetch(`/api/schedule?date=${date}`),
-        fetch('/api/tasks'),
-      ]);
-      const schedData = await schedRes.json();
-      const tasksData = await tasksRes.json();
-      setEntries(Array.isArray(schedData) ? schedData : []);
-      if (Array.isArray(tasksData)) {
-        setDueTasks(
-          tasksData.filter((t: DueTask) => t.due_date === date && !t.parent_id)
-        );
-      }
-
-      // CalDAV sync — non-blocking, never crashes the schedule
-      try {
-        const calRes = await fetch(`/api/caldav/sync?date=${date}`);
-        const calData = calRes.ok ? await calRes.json() : [];
-        setCalEvents(Array.isArray(calData) ? calData : []);
-      } catch {
-        // CalDAV unavailable — schedule still works fine
-        setCalEvents([]);
-      }
+      const res = await fetch(`/api/schedule?date=${date}`);
+      const data = await res.json();
+      setEntries(Array.isArray(data) ? data : []);
     } catch {
       toast.error('Failed to load schedule');
     } finally {
@@ -160,6 +138,32 @@ export default function DayView({ date, refreshKey, onReset }: DayViewProps) {
   }, [date]);
 
   useEffect(() => { fetchEntries(); }, [fetchEntries, refreshKey]);
+
+  // Fetch due-date reminders — completely independent of schedule loading
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/tasks')
+      .then(r => r.json())
+      .then(data => {
+        if (cancelled || !Array.isArray(data)) return;
+        setDueTasks(data.filter((t: DueTask) => t.due_date === date && !t.parent_id));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [date, refreshKey]);
+
+  // Fetch Apple Calendar events — completely independent, never affects schedule
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/caldav/sync?date=${date}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(data => {
+        if (cancelled) return;
+        setCalEvents(Array.isArray(data) ? data : []);
+      })
+      .catch(() => setCalEvents([]));
+    return () => { cancelled = true; };
+  }, [date, refreshKey]);
 
   useEffect(() => {
     if (_settingsCache) {
