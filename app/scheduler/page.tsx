@@ -5,6 +5,7 @@ import DatePicker from '@/components/shared/DatePicker';
 import CalendarWidget from '@/components/shared/CalendarWidget';
 import DayView from '@/components/scheduler/DayView';
 import WeekView from '@/components/scheduler/WeekView';
+import CalDAVPanel from '@/components/scheduler/CalDAVPanel';
 import ActivityManager from '@/components/scheduler/ActivityManager';
 import { Button } from '@/components/ui/button';
 import { CalendarDays, Calendar, Settings2, RefreshCw } from 'lucide-react';
@@ -101,7 +102,10 @@ export default function SchedulerPage() {
           </div>
 
           {viewMode === 'day' ? (
-            <DayView date={selectedDate} refreshKey={dayRefreshKey} onReset={handleDayReset} />
+            <>
+              <CalDAVPanel date={selectedDate} />
+              <DayView date={selectedDate} refreshKey={dayRefreshKey} onReset={handleDayReset} />
+            </>
           ) : (
             <WeekView
               selectedDate={selectedDate}
