@@ -4,6 +4,7 @@ import { useTheme } from 'next-themes';
 import { Sparkles, Sun, Moon, Monitor, Bell, Download, Upload, Trash2, Info, BookOpen, DatabaseBackup, Settings2 } from 'lucide-react';
 import TaskLibraryManager from '@/components/settings/TaskLibraryManager';
 import AiTaskLibraryGenerator from '@/components/settings/AiTaskLibraryGenerator';
+import CalDAVSettings from '@/components/settings/CalDAVSettings';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -546,6 +547,18 @@ export default function SettingsPage() {
           {backups.length === 0 && (
             <p className="text-xs text-gray-400">No backups yet — click "Save backup now" to create one.</p>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Apple Calendar */}
+      <Card id="settings-caldav">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Settings2 className="h-5 w-5 text-teal-600" /> Integrations
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <CalDAVSettings />
         </CardContent>
       </Card>
 
