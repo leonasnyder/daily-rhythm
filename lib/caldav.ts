@@ -346,6 +346,15 @@ function toIcalDate(date: string, endOfDay = false): string {
   return endOfDay ? `${d}T235959Z` : `${d}T000000Z`;
 }
 
+/**
+ * Add N days to a YYYY-MM-DD date string.
+ */
+function addDays(date: string, n: number): string {
+  const d = new Date(date + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
 export async function fetchEventsForDate(
   calendarUrl: string,
   username: string,
@@ -354,7 +363,11 @@ export async function fetchEventsForDate(
 ): Promise<CalDAVEvent[]> {
   const auth = basicAuth(username, password);
   const start = toIcalDate(date);
-  const end = toIcalDate(date, true);
+  // Extend the end by 1 extra day so evening events stored in UTC
+  // (e.g. 6 PM Pacific = 1 AM UTC next day) are included in the response.
+  // Client-side filtering using the TZID-embedded local date removes any
+  // genuine next-day events.
+  const end = toIcalDate(addDays(date, 1), true);
 
   const body = `<?xml version="1.0" encoding="UTF-8"?>
 <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
@@ -406,9 +419,29 @@ export async function fetchEventsForDate(
     }
 
     if (startCompact === compact) {
-      // Timed event already has the correct date
+      // Timed event already has the correct date (TZID local time)
       result.push(ev);
       continue;
+    }
+
+    // UTC timestamp (ends with Z) on the next calendar day:
+    // e.g. 6 PM Pacific = 01:00 UTC next day.  Accept if it's date+1 and the
+    // UTC hour is < 12 (meaning local time is still "today" for UTC-12..UTC-1).
+    const isUtc = ev.dtstart.endsWith('Z');
+    const nextCompact = addDays(date, 1).replace(/-/g, '');
+    if (isUtc && startCompact === nextCompact) {
+      const utcHour = parseInt(ev.dtstart.slice(9, 11), 10);
+      if (utcHour < 12) {
+        // Rewrite the dtstart date to today so the panel shows the correct local date
+        result.push({
+          ...ev,
+          dtstart: compact + ev.dtstart.slice(8),
+          dtend: ev.dtend.startsWith(nextCompact)
+            ? compact + ev.dtend.slice(8)
+            : ev.dtend,
+        });
+        continue;
+      }
     }
 
     if ((ev as { isRecurring?: boolean }).isRecurring) {
@@ -424,7 +457,7 @@ export async function fetchEventsForDate(
       continue;
     }
 
-    // Non-recurring event on a different date — skip (server glitch / edge case)
+    // Non-recurring event on a different date — skip
   }
   return result;
 }
