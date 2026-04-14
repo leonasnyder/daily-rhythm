@@ -6,6 +6,7 @@ import CalendarWidget from '@/components/shared/CalendarWidget';
 import DayView from '@/components/scheduler/DayView';
 import WeekView from '@/components/scheduler/WeekView';
 import ActivityManager from '@/components/scheduler/ActivityManager';
+import DueRemindersBar from '@/components/scheduler/DueRemindersBar';
 import { Button } from '@/components/ui/button';
 import { CalendarDays, Calendar, Settings2, RefreshCw } from 'lucide-react';
 import { useActivityReminders } from '@/lib/hooks/useActivityReminders';
@@ -80,7 +81,7 @@ export default function SchedulerPage() {
                 onClick={() => setViewMode('day')}
                 className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors min-h-[44px] ${
                   viewMode === 'day'
-                    ? 'bg-red-600 text-white'
+                    ? 'bg-teal-600 text-white'
                     : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50'
                 }`}
               >
@@ -91,7 +92,7 @@ export default function SchedulerPage() {
                 onClick={() => { setViewMode('week'); setWeekRefreshKey(k => k + 1); }}
                 className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors min-h-[44px] ${
                   viewMode === 'week'
-                    ? 'bg-red-600 text-white'
+                    ? 'bg-teal-600 text-white'
                     : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50'
                 }`}
               >
@@ -101,7 +102,10 @@ export default function SchedulerPage() {
           </div>
 
           {viewMode === 'day' ? (
-            <DayView date={selectedDate} refreshKey={dayRefreshKey} onReset={handleDayReset} />
+            <>
+              <DueRemindersBar date={selectedDate} />
+              <DayView date={selectedDate} refreshKey={dayRefreshKey} onReset={handleDayReset} />
+            </>
           ) : (
             <WeekView
               selectedDate={selectedDate}
