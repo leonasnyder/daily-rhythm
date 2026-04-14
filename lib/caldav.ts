@@ -303,7 +303,9 @@ function parseVEvents(icalData: string): { uid: string; summary: string; dtstart
     const location = parseIcalProp(lines, 'LOCATION') ?? undefined;
 
     // DTSTART may have params: DTSTART;TZID=America/Los_Angeles:20250415T090000
-    const dtstartLine = lines.find(l => l.toUpperCase().startsWith('DTSTART'));
+    // For recurring events iCloud may return a RECURRENCE-ID with the actual occurrence date
+    const recurrenceIdLine = lines.find(l => l.toUpperCase().startsWith('RECURRENCE-ID'));
+    const dtstartLine = recurrenceIdLine ?? lines.find(l => l.toUpperCase().startsWith('DTSTART'));
     const dtendLine = lines.find(l => l.toUpperCase().startsWith('DTEND'));
 
     if (!dtstartLine) continue;
@@ -353,9 +355,7 @@ export async function fetchEventsForDate(
 <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
   <D:prop>
     <D:getetag/>
-    <C:calendar-data>
-      <C:expand start="${start}" end="${end}"/>
-    </C:calendar-data>
+    <C:calendar-data/>
   </D:prop>
   <C:filter>
     <C:comp-filter name="VCALENDAR">
