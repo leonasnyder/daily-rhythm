@@ -12,6 +12,17 @@ async function ensureColumns() {
   if (_columnsEnsured) return;
   try {
     await sql`ALTER TABLE schedule_entries ADD COLUMN IF NOT EXISTS user_id UUID`;
+    // removed / is_completed may be absent in older-created DBs and the
+    // GET filters by `removed = 0`. If the column is missing the query
+    // errors; if the default is NULL the row we just inserted is filtered
+    // out even though it saved. Force presence and a 0 default so newly
+    // inserted rows are visible without an explicit value.
+    await sql`ALTER TABLE schedule_entries ADD COLUMN IF NOT EXISTS removed INTEGER DEFAULT 0`;
+    await sql`ALTER TABLE schedule_entries ALTER COLUMN removed SET DEFAULT 0`;
+    await sql`UPDATE schedule_entries SET removed = 0 WHERE removed IS NULL`;
+    await sql`ALTER TABLE schedule_entries ADD COLUMN IF NOT EXISTS is_completed INTEGER DEFAULT 0`;
+    await sql`ALTER TABLE schedule_entries ALTER COLUMN is_completed SET DEFAULT 0`;
+    await sql`UPDATE schedule_entries SET is_completed = 0 WHERE is_completed IS NULL`;
     await sql`ALTER TABLE activities ADD COLUMN IF NOT EXISTS user_id UUID`;
     await sql`ALTER TABLE activity_defaults ADD COLUMN IF NOT EXISTS days_of_week TEXT`;
     await sql`ALTER TABLE activity_usage_log ADD COLUMN IF NOT EXISTS user_id UUID`;
@@ -103,6 +114,20 @@ export async function GET(req: NextRequest) {
         WHERE se.date = ${date} AND se.removed = 0 AND se.user_id = ${userId}
         ORDER BY se.time_slot
       ` as Record<string, unknown>[];
+      // Debug: if the GET returns fewer rows than physically exist for this
+      // user+date, log the gap so we can tell from Vercel logs whether a
+      // saved row is being filtered out (e.g., by a NULL `removed` column).
+      if (entries.length === 0) {
+        const total = await sql`
+          SELECT COUNT(*)::int AS n FROM schedule_entries
+          WHERE date = ${date} AND user_id = ${userId}
+        ` as unknown as Array<{ n: number }>;
+        if (total[0]?.n > 0) {
+          console.warn('[schedule GET] rows exist but filter hid them', {
+            date, userId, totalForDate: total[0].n,
+          });
+        }
+      }
     } else if (startDate && endDate) {
       const allDefaults = await sql`
         SELECT a.id as activity_id, ad.default_time, ad.default_duration, ad.days_of_week
@@ -217,10 +242,17 @@ export async function POST(req: NextRequest) {
     if (!date || !time_slot) return NextResponse.json({ error: 'date and time_slot required' }, { status: 400 });
 
     const [entry] = await sql`
-      INSERT INTO schedule_entries (user_id, activity_id, date, time_slot, duration_minutes, notes)
-      VALUES (${userId}, ${activity_id ?? null}, ${date}, ${time_slot}, ${duration_minutes ?? 30}, ${notes ?? null})
+      INSERT INTO schedule_entries (user_id, activity_id, date, time_slot, duration_minutes, notes, removed, is_completed)
+      VALUES (${userId}, ${activity_id ?? null}, ${date}, ${time_slot}, ${duration_minutes ?? 30}, ${notes ?? null}, 0, 0)
       RETURNING *
     `;
+    console.log('[schedule POST] inserted entry:', {
+      id: (entry as { id: number }).id,
+      user_id: userId,
+      date,
+      time_slot,
+      activity_id,
+    });
 
     if (activity_id) {
       const weekStart = getWeekStart(new Date(date + 'T12:00:00'));
