@@ -5,6 +5,35 @@ import { requireUser } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
+// Self-heal: make sure user_id columns exist before any INSERT that
+// references them. Runs once per server instance.
+let _columnsEnsured = false;
+async function ensureColumns() {
+  if (_columnsEnsured) return;
+  try {
+    await sql`ALTER TABLE schedule_entries ADD COLUMN IF NOT EXISTS user_id UUID`;
+    await sql`ALTER TABLE activities ADD COLUMN IF NOT EXISTS user_id UUID`;
+    await sql`ALTER TABLE activity_defaults ADD COLUMN IF NOT EXISTS days_of_week TEXT`;
+    await sql`ALTER TABLE activity_usage_log ADD COLUMN IF NOT EXISTS user_id UUID`;
+    // Also make sure the unique constraint is user-scoped — required for
+    // the ON CONFLICT (user_id, activity_id, week_start) upsert below.
+    try {
+      await sql`ALTER TABLE activity_usage_log DROP CONSTRAINT IF EXISTS activity_usage_log_activity_id_week_start_key`;
+    } catch { /* ignore */ }
+    try {
+      await sql`
+        ALTER TABLE activity_usage_log
+        ADD CONSTRAINT activity_usage_log_user_activity_week_key
+        UNIQUE(user_id, activity_id, week_start)
+      `;
+    } catch { /* already exists or conflicting data — ignore */ }
+    await sql`CREATE INDEX IF NOT EXISTS idx_schedule_entries_user_id ON schedule_entries(user_id)`;
+  } catch (e) {
+    console.error('[schedule] ensureColumns failed:', e);
+  }
+  _columnsEnsured = true;
+}
+
 async function attachSubActivities(entries: Record<string, unknown>[]): Promise<Record<string, unknown>[]> {
   if (entries.length === 0) return entries;
   const ids = entries.map(e => e.id as number);
@@ -22,6 +51,7 @@ export async function GET(req: NextRequest) {
   const { userId, errorResponse } = await requireUser();
   if (errorResponse) return errorResponse;
   try {
+    await ensureColumns();
     const { searchParams } = new URL(req.url);
     const date = searchParams.get('date');
     const startDate = searchParams.get('startDate');
@@ -152,6 +182,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(await attachSubActivities(entries));
   } catch (e) {
+    console.error('[schedule GET]', e);
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }
 }
@@ -180,6 +211,7 @@ export async function POST(req: NextRequest) {
   const { userId, errorResponse } = await requireUser();
   if (errorResponse) return errorResponse;
   try {
+    await ensureColumns();
     const body = await req.json();
     const { activity_id, date, time_slot, duration_minutes, notes, sub_activity_ids, custom_sub_labels } = body;
     if (!date || !time_slot) return NextResponse.json({ error: 'date and time_slot required' }, { status: 400 });
@@ -230,6 +262,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(entry, { status: 201 });
   } catch (e) {
+    console.error('[schedule POST]', e);
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }
 }

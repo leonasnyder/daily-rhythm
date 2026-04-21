@@ -139,12 +139,20 @@ export default function AddActivityModal({ date, defaultSlot, onClose, onAdded }
         }),
       });
       if (!res.ok) {
-        const json = await res.json();
-        throw new Error(json.error ?? 'Failed to add');
+        let msg = `Save failed (HTTP ${res.status})`;
+        try {
+          const json = await res.json();
+          if (json?.error) msg = String(json.error);
+        } catch { /* not JSON */ }
+        console.error('[AddActivityModal] schedule POST failed:', res.status, msg);
+        toast.error(msg);
+        throw new Error(msg);
       }
       await onAdded();
     } catch (e) {
-      setError(String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('[AddActivityModal] handleAdd error:', e);
+      setError(msg);
     } finally {
       setSaving(false);
     }
@@ -221,6 +229,14 @@ export default function AddActivityModal({ date, defaultSlot, onClose, onAdded }
     }
     setCreating(true);
     setCreateError('');
+    const describeError = async (res: Response, fallback: string) => {
+      let msg = `${fallback} (HTTP ${res.status})`;
+      try {
+        const body = await res.json();
+        if (body?.error) msg = String(body.error);
+      } catch { /* not JSON */ }
+      return msg;
+    };
     try {
       let activityId: number;
 
@@ -242,7 +258,11 @@ export default function AddActivityModal({ date, defaultSlot, onClose, onAdded }
             })) : [],
           }),
         });
-        if (!res.ok) throw new Error('Failed to create activity');
+        if (!res.ok) {
+          const msg = await describeError(res, 'Failed to create activity');
+          console.error('[AddActivityModal] activity POST failed:', res.status, msg);
+          throw new Error(msg);
+        }
         const created = await res.json();
         activityId = created.id;
 
@@ -268,7 +288,11 @@ export default function AddActivityModal({ date, defaultSlot, onClose, onAdded }
             defaults: [],
           }),
         });
-        if (!res.ok) throw new Error('Failed to create activity');
+        if (!res.ok) {
+          const msg = await describeError(res, 'Failed to create activity');
+          console.error('[AddActivityModal] activity POST failed:', res.status, msg);
+          throw new Error(msg);
+        }
         const created = await res.json();
         activityId = created.id;
       }
@@ -286,12 +310,19 @@ export default function AddActivityModal({ date, defaultSlot, onClose, onAdded }
           custom_sub_labels: newSubActivities,
         }),
       });
-      if (!schedRes.ok) throw new Error('Failed to add to schedule');
+      if (!schedRes.ok) {
+        const msg = await describeError(schedRes, 'Failed to add to schedule');
+        console.error('[AddActivityModal] schedule POST failed:', schedRes.status, msg);
+        throw new Error(msg);
+      }
 
       toast.success(`"${newName.trim()}" added to your schedule${saveToList ? ' and activity list' : ''}`);
       await onAdded();
     } catch (e) {
-      setCreateError(String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('[AddActivityModal] handleCreate error:', e);
+      setCreateError(msg);
+      toast.error(msg);
     } finally {
       setCreating(false);
     }

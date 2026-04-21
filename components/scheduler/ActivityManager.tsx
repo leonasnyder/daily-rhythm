@@ -152,7 +152,17 @@ export default function ActivityManager({ open, onClose }: ActivityManagerProps)
           })) : [],
         }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        let msg = `Save failed (HTTP ${res.status})`;
+        try {
+          const body = await res.json();
+          if (body?.error) msg = String(body.error);
+        } catch {
+          // response wasn't JSON
+        }
+        console.error('[ActivityManager] create failed:', res.status, msg);
+        throw new Error(msg);
+      }
       const created = await res.json();
       if (newSubActivities.length > 0) {
         for (const label of newSubActivities) {
@@ -171,8 +181,10 @@ export default function ActivityManager({ open, onClose }: ActivityManagerProps)
       setNewSubLabel('');
       setErrors({});
       toast.success('Activity created');
-    } catch {
-      toast.error('Failed to create activity');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('[ActivityManager] create error:', e);
+      toast.error(`Failed to create activity — ${msg}`);
     }
   };
 
