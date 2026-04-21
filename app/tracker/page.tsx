@@ -58,7 +58,16 @@ interface Completion {
 }
 
 export default function HabitTrackerPage() {
-  const [date, setDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
+  // Date must be computed client-only. Using `new Date()` inside a
+  // useState initializer produces a UTC value during SSR but the local
+  // timezone value on the client, which desynchronises the two renders
+  // and trips React hydration error #425 (event handlers never attach,
+  // so the whole page appears dead).
+  const [date, setDate] = useState<string>('');
+  useEffect(() => {
+    if (!date) setDate(format(new Date(), 'yyyy-MM-dd'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [habits, setHabits] = useState<Habit[]>([]);
   const [completions, setCompletions] = useState<Completion[]>([]);
   const [loading, setLoading] = useState(true);
@@ -187,6 +196,11 @@ export default function HabitTrackerPage() {
   const totalHabits = habits.length;
   const completedCount = habits.filter(h => isCompleted(h.id)).length;
   const pct = totalHabits > 0 ? Math.round((completedCount / totalHabits) * 100) : 0;
+
+  // Guard: keep SSR and first client render byte-identical until date is set.
+  if (!date) {
+    return <div id="habit-tracker-page" className="max-w-2xl mx-auto p-4" />;
+  }
 
   return (
     <div id="habit-tracker-page" className="max-w-2xl mx-auto p-4">

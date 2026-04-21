@@ -31,7 +31,15 @@ function fmtDur(secs: number) {
 }
 
 export default function SchedulerPage() {
-  const [selectedDate, setSelectedDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
+  // Date must be computed client-only to avoid an SSR/client timezone
+  // mismatch that triggers React hydration error #425 and leaves the
+  // page non-interactive (buttons "do nothing" even though the UI
+  // looks fine).
+  const [selectedDate, setSelectedDate] = useState<string>('');
+  useEffect(() => {
+    if (!selectedDate) setSelectedDate(format(new Date(), 'yyyy-MM-dd'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [viewMode, setViewMode] = useState<ViewMode>('day');
   const [activityManagerOpen, setActivityManagerOpen] = useState(false);
   const [weekRefreshKey, setWeekRefreshKey] = useState(0);
@@ -76,6 +84,13 @@ export default function SchedulerPage() {
 
   const { pullDistance } = usePullToRefresh(handlePullRefresh);
   const { reminders, dismiss } = useActivityReminders();
+
+  // Wait until selectedDate is populated on the client. This keeps the
+  // server-rendered HTML identical to the first client render (an empty
+  // shell), which is what prevents React hydration error #425.
+  if (!selectedDate) {
+    return <div id="scheduler-page" className="max-w-7xl mx-auto p-4" />;
+  }
 
   return (
     <div id="scheduler-page" className="max-w-7xl mx-auto p-4">

@@ -113,8 +113,16 @@ export default function DayView({ date, refreshKey, onReset }: DayViewProps) {
   const [canUndo, setCanUndo] = useState(false);
   const MAX_HISTORY = 10;
 
-  const today = format(new Date(), 'yyyy-MM-dd');
-  const isPastDay = date < today;
+  // `today` must be client-only. Using `new Date()` directly in the render
+  // body produces UTC during SSR and the local timezone on the client, which
+  // causes React hydration error #425 (event handlers silently fail to
+  // attach, making the whole page "dead"). Until the effect runs, `today`
+  // is empty so `isPastDay` is false — editable by default, which is safe.
+  const [today, setToday] = useState('');
+  useEffect(() => {
+    setToday(format(new Date(), 'yyyy-MM-dd'));
+  }, []);
+  const isPastDay = today !== '' && date < today;
   const [isEditingPast, setIsEditingPast] = useState(false);
   const isLocked = isPastDay && !isEditingPast;
 
