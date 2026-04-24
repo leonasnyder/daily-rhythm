@@ -159,11 +159,19 @@ export default function DayView({ date, refreshKey, onReset }: DayViewProps) {
     return () => { cancelled = true; };
   }, [date, refreshKey]);
 
-  // Apple Calendar events — independent fetch, never affects schedule loading
+  // Apple Calendar events — independent fetch, never affects schedule loading.
+  // Pass the browser's IANA timezone so the server builds the CalDAV
+  // time-range filter around the user's actual local day (vs. a wide UTC
+  // window that pulls in yesterday-evening and tomorrow-morning events).
   useEffect(() => {
     let cancelled = false;
     setCalEvents([]);
-    fetch(`/api/caldav/sync?date=${date}`)
+    let tz: string | undefined;
+    try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { /* unsupported */ }
+    const url = tz
+      ? `/api/caldav/sync?date=${date}&tz=${encodeURIComponent(tz)}`
+      : `/api/caldav/sync?date=${date}`;
+    fetch(url)
       .then(r => r.ok ? r.json() : [])
       .then(data => { if (!cancelled && Array.isArray(data)) setCalEvents(data); })
       .catch(() => {});

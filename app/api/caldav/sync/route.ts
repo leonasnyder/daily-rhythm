@@ -14,6 +14,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'date param required (YYYY-MM-DD)' }, { status: 400 });
   }
 
+  // Optional IANA timezone (e.g. "America/Los_Angeles") from the client. When
+  // provided, the CalDAV time-range filter is built around the user's local
+  // day instead of UTC — this prevents yesterday-evening events (which live in
+  // today's early-morning hours in UTC for negative offsets) from leaking in.
+  const tzParam = req.nextUrl.searchParams.get('tz');
+  const tz =
+    tzParam && /^[A-Za-z_+\-]+(?:\/[A-Za-z_0-9+\-]+)*$/.test(tzParam) ? tzParam : undefined;
+
   // Load credentials
   const rows = await sql`
     SELECT server_url, username, password, enabled
@@ -29,7 +37,7 @@ export async function GET(req: NextRequest) {
   const { server_url, username, password } = rows[0];
 
   try {
-    const events = await fetchAllEventsForDate(server_url, username, password, date);
+    const events = await fetchAllEventsForDate(server_url, username, password, date, tz);
     return NextResponse.json(events);
   } catch (e) {
     console.error('CalDAV sync error:', e);

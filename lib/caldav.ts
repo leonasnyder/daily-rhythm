@@ -14,6 +14,13 @@ export interface CalDAVEvent {
   startTime: string | null; // "HH:MM" local or null for all-day
   endTime: string | null;
   isRecurring?: boolean;
+  /**
+   * If this VEVENT is an override of a specific occurrence of a recurring
+   * series, this holds the RECURRENCE-ID value (the *original* pre-override
+   * occurrence time, used to identify which instance is being replaced).
+   * Undefined on master events and non-recurring events.
+   */
+  recurrenceId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -287,7 +294,7 @@ function icalToTime(value: string): { isAllDay: boolean; time: string | null; is
   return { isAllDay: true, time: null, iso: clean };
 }
 
-function parseVEvents(icalData: string): { uid: string; summary: string; dtstart: string; dtend: string; description?: string; location?: string; isAllDay: boolean; startTime: string | null; endTime: string | null; isRecurring: boolean }[] {
+function parseVEvents(icalData: string): { uid: string; summary: string; dtstart: string; dtend: string; description?: string; location?: string; isAllDay: boolean; startTime: string | null; endTime: string | null; isRecurring: boolean; recurrenceId?: string }[] {
   const unfolded = padIcalValue(icalData);
   const events: ReturnType<typeof parseVEvents> = [];
 
@@ -303,14 +310,18 @@ function parseVEvents(icalData: string): { uid: string; summary: string; dtstart
     const description = parseIcalProp(lines, 'DESCRIPTION') ?? undefined;
     const location = parseIcalProp(lines, 'LOCATION') ?? undefined;
 
-    // Detect recurring events — they have RRULE or RECURRENCE-ID
-    const isRecurring = lines.some(l => l.toUpperCase().startsWith('RRULE'));
+    // Detect recurring events — they have RRULE (master) or RECURRENCE-ID (override)
+    const isRecurring = lines.some(l =>
+      l.toUpperCase().startsWith('RRULE') || l.toUpperCase().startsWith('RECURRENCE-ID')
+    );
 
-    // DTSTART may have params: DTSTART;TZID=America/Los_Angeles:20250415T090000
-    // For recurring events iCloud may return a RECURRENCE-ID with the actual occurrence date
+    // DTSTART is the *effective* start of this VEVENT. For an override, that's the
+    // rescheduled time (e.g. 7 PM). RECURRENCE-ID stores the *original* pre-override
+    // occurrence time — it must NOT be used as DTSTART, or a rescheduled event will
+    // appear at its old time.
+    const dtstartLine = lines.find(l => l.toUpperCase().startsWith('DTSTART'));
+    const dtendLine   = lines.find(l => l.toUpperCase().startsWith('DTEND'));
     const recurrenceIdLine = lines.find(l => l.toUpperCase().startsWith('RECURRENCE-ID'));
-    const dtstartLine = recurrenceIdLine ?? lines.find(l => l.toUpperCase().startsWith('DTSTART'));
-    const dtendLine = lines.find(l => l.toUpperCase().startsWith('DTEND'));
 
     if (!dtstartLine) continue;
 
@@ -319,6 +330,12 @@ function parseVEvents(icalData: string): { uid: string; summary: string; dtstart
 
     const start = icalToTime(dtstartRaw);
     const end = icalToTime(dtendRaw);
+
+    let recurrenceId: string | undefined;
+    if (recurrenceIdLine) {
+      const ridRaw = recurrenceIdLine.slice(recurrenceIdLine.indexOf(':') + 1).trim();
+      recurrenceId = icalToTime(ridRaw).iso;
+    }
 
     events.push({
       uid,
@@ -331,6 +348,7 @@ function parseVEvents(icalData: string): { uid: string; summary: string; dtstart
       startTime: start.time,
       endTime: end.time,
       isRecurring,
+      recurrenceId,
     });
   }
 
@@ -355,19 +373,129 @@ function addDays(date: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+/**
+ * Return the offset in minutes such that `localTime = utcTime + offset` for the
+ * given IANA `timeZone` at the given UTC instant. Positive for zones east of UTC,
+ * negative for zones west of UTC. (E.g. America/Los_Angeles in July → -420.)
+ */
+function getTzOffsetMinutes(timeZone: string, utcMs: number): number {
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false,
+  });
+  const parts = dtf.formatToParts(new Date(utcMs));
+  const get = (t: string) => {
+    const p = parts.find(pp => pp.type === t);
+    return p ? parseInt(p.value, 10) : 0;
+  };
+  let year = get('year');
+  let month = get('month');
+  let day = get('day');
+  let hour = get('hour');
+  const minute = get('minute');
+  const second = get('second');
+  // en-US reports midnight as hour "24" — normalize.
+  if (hour === 24) hour = 0;
+  const localAsUtc = Date.UTC(year, month - 1, day, hour, minute, second);
+  return Math.round((localAsUtc - utcMs) / 60_000);
+}
+
+function padLeft(n: number, w: number): string {
+  return String(n).padStart(w, '0');
+}
+
+function msToIcalUtc(ms: number): string {
+  const d = new Date(ms);
+  return (
+    `${d.getUTCFullYear()}${padLeft(d.getUTCMonth() + 1, 2)}${padLeft(d.getUTCDate(), 2)}` +
+    `T${padLeft(d.getUTCHours(), 2)}${padLeft(d.getUTCMinutes(), 2)}${padLeft(d.getUTCSeconds(), 2)}Z`
+  );
+}
+
+/**
+ * Compute the UTC instants corresponding to the start and end of the given
+ * local calendar day in `timeZone`. Used to build a tight time-range filter
+ * that matches exactly "today in the user's local timezone".
+ */
+function localDayUtcBounds(date: string, timeZone: string): { startUtc: string; endUtc: string } {
+  const [y, m, d] = date.split('-').map(Number);
+  // Use the UTC noon for the offset probe — avoids DST spring-forward midnight edge
+  // cases where midnight local may not exist.
+  const probe = Date.UTC(y, m - 1, d, 12, 0, 0);
+  const offsetMin = getTzOffsetMinutes(timeZone, probe);
+  // Local midnight as a UTC timestamp.
+  const startMs = Date.UTC(y, m - 1, d, 0, 0, 0) - offsetMin * 60_000;
+  const endMs = startMs + 24 * 60 * 60 * 1000;
+  return { startUtc: msToIcalUtc(startMs), endUtc: msToIcalUtc(endMs) };
+}
+
+/**
+ * Given a UTC iCal timestamp ("YYYYMMDDTHHMMSSZ"), return the local calendar
+ * date in `timeZone` as a compact "YYYYMMDD" string. Returns null if the input
+ * isn't a UTC timestamp.
+ */
+function utcIcalToLocalCompact(icalUtc: string, timeZone: string): string | null {
+  if (!/^\d{8}T\d{6}Z$/.test(icalUtc)) return null;
+  const y = parseInt(icalUtc.slice(0, 4), 10);
+  const mo = parseInt(icalUtc.slice(4, 6), 10);
+  const d = parseInt(icalUtc.slice(6, 8), 10);
+  const h = parseInt(icalUtc.slice(9, 11), 10);
+  const mi = parseInt(icalUtc.slice(11, 13), 10);
+  const s = parseInt(icalUtc.slice(13, 15), 10);
+  const ms = Date.UTC(y, mo - 1, d, h, mi, s);
+  const dtf = new Intl.DateTimeFormat('en-CA', {
+    timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
+  });
+  // en-CA formats as YYYY-MM-DD
+  return dtf.format(new Date(ms)).replace(/-/g, '');
+}
+
+/**
+ * Given a UTC iCal timestamp, return the local "HH:MM" in `timeZone`, or null
+ * if input isn't a UTC timestamp.
+ */
+function utcIcalToLocalHHMM(icalUtc: string, timeZone: string): string | null {
+  if (!/^\d{8}T\d{6}Z$/.test(icalUtc)) return null;
+  const y = parseInt(icalUtc.slice(0, 4), 10);
+  const mo = parseInt(icalUtc.slice(4, 6), 10);
+  const d = parseInt(icalUtc.slice(6, 8), 10);
+  const h = parseInt(icalUtc.slice(9, 11), 10);
+  const mi = parseInt(icalUtc.slice(11, 13), 10);
+  const s = parseInt(icalUtc.slice(13, 15), 10);
+  const ms = Date.UTC(y, mo - 1, d, h, mi, s);
+  const dtf = new Intl.DateTimeFormat('en-GB', {
+    timeZone, hour: '2-digit', minute: '2-digit', hour12: false,
+  });
+  const str = dtf.format(new Date(ms)); // "HH:MM"
+  // Some locales may return "24:00" at midnight
+  return str.replace(/^24:/, '00:');
+}
+
 export async function fetchEventsForDate(
   calendarUrl: string,
   username: string,
   password: string,
-  date: string // "YYYY-MM-DD"
+  date: string, // "YYYY-MM-DD"
+  timeZone?: string, // IANA zone like "America/Los_Angeles"; if omitted, fall back to a wide UTC window
 ): Promise<CalDAVEvent[]> {
   const auth = basicAuth(username, password);
-  const start = toIcalDate(date);
-  // Extend the end by 1 extra day so evening events stored in UTC
-  // (e.g. 6 PM Pacific = 1 AM UTC next day) are included in the response.
-  // Client-side filtering using the TZID-embedded local date removes any
-  // genuine next-day events.
-  const end = toIcalDate(addDays(date, 1), true);
+
+  let start: string;
+  let end: string;
+  if (timeZone) {
+    // Tight window: exactly the user's local day, converted to UTC.
+    // This prevents yesterday's evening occurrences (which land in today's UTC
+    // early-morning hours for negative offsets) from being pulled into today.
+    const bounds = localDayUtcBounds(date, timeZone);
+    start = bounds.startUtc;
+    end = bounds.endUtc;
+  } else {
+    // Legacy fallback: [today 00:00 UTC, tomorrow 23:59 UTC].
+    start = toIcalDate(date);
+    end = toIcalDate(addDays(date, 1), true);
+  }
 
   const body = `<?xml version="1.0" encoding="UTF-8"?>
 <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
@@ -401,38 +529,68 @@ export async function fetchEventsForDate(
     events.push(...parsed);
   }
 
-  // iCloud returns recurring event masters with the original series DTSTART,
-  // not the occurrence date. The server's time-range filter already confirmed
-  // these events occur on the requested date, so we trust that and fix up the
-  // display date for recurring timed events.
   const compact = date.replace(/-/g, ''); // "20260414"
+  const nextCompact = addDays(date, 1).replace(/-/g, '');
+
+  // Build a map: UID → set of RECURRENCE-ID dates (compact YYYYMMDD) that have
+  // overrides in the response. Used to skip master-event substitution when the
+  // occurrence being displayed has been rescheduled via an override.
+  const overrideDatesByUid = new Map<string, Set<string>>();
+  for (const ev of events) {
+    if (ev.recurrenceId) {
+      const ridDate = ev.recurrenceId.slice(0, 8);
+      if (!overrideDatesByUid.has(ev.uid)) overrideDatesByUid.set(ev.uid, new Set());
+      overrideDatesByUid.get(ev.uid)!.add(ridDate);
+    }
+  }
 
   const result: CalDAVEvent[] = [];
   for (const ev of events) {
     const startCompact = ev.dtstart.slice(0, 8);
-    const endCompact   = ev.dtend.slice(0, 8);
+    const isUtc = ev.dtstart.endsWith('Z');
+    // "Master" = recurring event with no RECURRENCE-ID (the series definition)
+    const isMaster = !!ev.isRecurring && !ev.recurrenceId;
 
     if (ev.isAllDay) {
       // All-day / multi-day: date must fall within [start, end)
+      const endCompact = ev.dtend.slice(0, 8);
       if (startCompact <= compact && compact < endCompact) result.push(ev);
       continue;
     }
 
-    if (startCompact === compact) {
-      // Timed event already has the correct date (TZID local time)
+    // If a master has an override whose RECURRENCE-ID is today, the override
+    // replaces today's occurrence — drop the master so we don't render both
+    // (or worse, render the master at the pre-reschedule time).
+    if (isMaster && overrideDatesByUid.get(ev.uid)?.has(compact)) {
+      continue;
+    }
+
+    // TZID-embedded local time whose date is today: already correct.
+    if (!isUtc && startCompact === compact) {
       result.push(ev);
       continue;
     }
 
-    // UTC timestamp (ends with Z) on the next calendar day:
-    // e.g. 6 PM Pacific = 01:00 UTC next day.  Accept if it's date+1 and the
-    // UTC hour is < 12 (meaning local time is still "today" for UTC-12..UTC-1).
-    const isUtc = ev.dtstart.endsWith('Z');
-    const nextCompact = addDays(date, 1).replace(/-/g, '');
-    if (isUtc && startCompact === nextCompact) {
+    // UTC timestamp: use the user's timezone to determine the real local date.
+    if (isUtc && timeZone) {
+      const localDate = utcIcalToLocalCompact(ev.dtstart, timeZone);
+      if (localDate === compact) {
+        const localHHMM = utcIcalToLocalHHMM(ev.dtstart, timeZone);
+        const localEndHHMM = utcIcalToLocalHHMM(ev.dtend, timeZone);
+        result.push({
+          ...ev,
+          startTime: localHHMM ?? ev.startTime,
+          endTime: localEndHHMM ?? ev.endTime,
+        });
+      }
+      continue;
+    }
+
+    // UTC timestamp with no timezone provided: best-effort legacy behavior —
+    // accept events on tomorrow's UTC day with UTC hour < 12 as "today" local.
+    if (isUtc && !timeZone && startCompact === nextCompact) {
       const utcHour = parseInt(ev.dtstart.slice(9, 11), 10);
       if (utcHour < 12) {
-        // Rewrite the dtstart date to today so the panel shows the correct local date
         result.push({
           ...ev,
           dtstart: compact + ev.dtstart.slice(8),
@@ -440,17 +598,14 @@ export async function fetchEventsForDate(
             ? compact + ev.dtend.slice(8)
             : ev.dtend,
         });
-        continue;
       }
+      continue;
     }
 
-    if ((ev as { isRecurring?: boolean }).isRecurring) {
-      // Distinguish two cases:
-      //   A) Master event: original DTSTART is from a past series (weeks/months ago).
-      //      The server confirmed today has an occurrence → substitute today's date.
-      //   B) Adjacent-day event pulled in by the extended UTC window
-      //      (e.g. Monday 7 PM Pacific = 2 AM Tuesday UTC, returned when querying Tuesday).
-      //      startCompact = yesterday → this is NOT today's event → skip it.
+    // Recurring master with TZID-local DTSTART from a past date: the server's
+    // tight time-range filter has already confirmed today has an occurrence,
+    // so substitute today's date onto the master's local time.
+    if (isMaster && !isUtc) {
       const sy = parseInt(startCompact.slice(0, 4), 10);
       const sm = parseInt(startCompact.slice(4, 6), 10) - 1;
       const sd = parseInt(startCompact.slice(6, 8), 10);
@@ -460,24 +615,19 @@ export async function fetchEventsForDate(
       const diffDays = Math.round(
         (Date.UTC(ty, tm, td) - Date.UTC(sy, sm, sd)) / 86_400_000
       );
-
-      if (diffDays <= 0) {
-        // Yesterday or earlier — not today's occurrence, skip
+      if (diffDays > 0) {
+        const timePart = ev.dtstart.slice(8);
+        const endTimePart = ev.dtend.slice(8);
+        result.push({
+          ...ev,
+          dtstart: compact + timePart,
+          dtend:   compact + endTimePart,
+        });
         continue;
       }
-
-      // diffDays > 0: master event from the past, substitute today's date
-      const timePart = ev.dtstart.slice(8); // e.g. "T190000" or "T190000Z"
-      const endTimePart = ev.dtend.slice(8);
-      result.push({
-        ...ev,
-        dtstart: compact + timePart,
-        dtend:   compact + endTimePart,
-      });
-      continue;
     }
 
-    // Non-recurring event on a different date — skip
+    // Non-matching event — skip
   }
   return result;
 }
@@ -490,23 +640,46 @@ export async function fetchAllEventsForDate(
   serverUrl: string,
   username: string,
   password: string,
-  date: string
+  date: string,
+  timeZone?: string,
 ): Promise<CalDAVEvent[]> {
   const principalUrl = await discoverPrincipalUrl(serverUrl, username, password);
   const calendarHome = await getCalendarHome(principalUrl, username, password);
   const calendars = await listCalendars(calendarHome, username, password);
 
   const allEvents = await Promise.all(
-    calendars.map(cal => fetchEventsForDate(cal.url, username, password, date).catch(() => []))
+    calendars.map(cal => fetchEventsForDate(cal.url, username, password, date, timeZone).catch(() => []))
   );
 
-  // Deduplicate by UID — iCloud can return the same event from multiple calendars
+  // Flatten, then deduplicate by UID — iCloud can return the same event from
+  // multiple calendars. When a master and an override both match today, prefer
+  // the override so we show the actual rescheduled time.
+  const flat = allEvents.flat();
+
+  // First pass: note which UIDs have an override present.
+  const hasOverride = new Set<string>();
+  for (const ev of flat) {
+    if (ev.recurrenceId) hasOverride.add(ev.uid);
+  }
+
   const seen = new Set<string>();
-  return allEvents.flat().filter(ev => {
-    if (seen.has(ev.uid)) return false;
+  const result: CalDAVEvent[] = [];
+  // Two-pass: emit overrides first, then non-overrides (skipping UIDs already seen).
+  for (const ev of flat) {
+    if (!ev.recurrenceId) continue;
+    if (seen.has(ev.uid)) continue;
     seen.add(ev.uid);
-    return true;
-  });
+    result.push(ev);
+  }
+  for (const ev of flat) {
+    if (ev.recurrenceId) continue;
+    // Drop a master if we already emitted an override for the same UID.
+    if (hasOverride.has(ev.uid)) continue;
+    if (seen.has(ev.uid)) continue;
+    seen.add(ev.uid);
+    result.push(ev);
+  }
+  return result;
 }
 
 // ---------------------------------------------------------------------------

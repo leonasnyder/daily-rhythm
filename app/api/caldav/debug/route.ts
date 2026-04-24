@@ -15,6 +15,9 @@ export async function GET(req: NextRequest) {
   if (errorResponse) return errorResponse;
 
   const date = req.nextUrl.searchParams.get('date') ?? new Date().toISOString().slice(0, 10);
+  const tzParam = req.nextUrl.searchParams.get('tz');
+  const tz =
+    tzParam && /^[A-Za-z_+\-]+(?:\/[A-Za-z_0-9+\-]+)*$/.test(tzParam) ? tzParam : undefined;
 
   const rows = await sql`
     SELECT server_url, username, password FROM dr_caldav_credentials
@@ -33,7 +36,7 @@ export async function GET(req: NextRequest) {
     const results = await Promise.all(
       calendars.map(async cal => {
         try {
-          const events = await fetchEventsForDate(cal.url, username, password, date);
+          const events = await fetchEventsForDate(cal.url, username, password, date, tz);
           return { calendar: cal.displayName, url: cal.url, eventCount: events.length, events };
         } catch (e) {
           return { calendar: cal.displayName, url: cal.url, error: (e as Error).message };
